@@ -16,7 +16,7 @@ import {
 
 const theme = {
 	fg: (_color: string, text: string) => text,
-	bg: (_color: string, text: string) => `[selected]${text}[/selected]`,
+	inverse: (text: string) => `[inverse]${text}[/inverse]`,
 } as DashboardTheme;
 
 test("folder labels are compact and strip terminal escapes", () => {
@@ -83,9 +83,9 @@ test("footer keeps extension statuses sorted below its two information lines", (
 	assert.deepEqual(lines.slice(2), ["first", "second", "last"]);
 });
 
-test("footer applies the theme-selected background to the full status row", () => {
+test("footer inverts only the selected status text", () => {
 	const lines = renderFooter({
-		width: 40,
+		width: 80,
 		directory: "~/work/app",
 		model: { ...EMPTY_MODEL_INFO },
 		git: { ...EMPTY_GIT_INFO },
@@ -100,11 +100,12 @@ test("footer applies the theme-selected background to the full status row", () =
 		theme,
 	});
 	assert.equal(lines[2], "1 terminal running · /ps");
-	assert.match(lines[3] ?? "", /^\[selected\]1 agent running/);
-	assert.match(lines[3] ?? "", /\.\.\.\[\/selected\]$/);
-	assert.equal((lines[3] ?? "").includes("\u001b"), false);
 	assert.equal(
-		visibleWidth((lines[3] ?? "").replace(/\[(?:\/)?selected\]/g, "")),
-		40,
+		lines[3],
+		"[inverse]1 agent running · $2.63 · /subagents-fleet[/inverse]",
+	);
+	assert.equal((lines[3] ?? "").includes("\u001b"), false);
+	assert.ok(
+		visibleWidth((lines[3] ?? "").replace(/\[(?:\/)?inverse\]/g, "")) < 80,
 	);
 });

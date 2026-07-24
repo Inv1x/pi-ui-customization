@@ -29,7 +29,7 @@ No configuration file is required. The package uses the active Pi theme for foot
 
 Because Pi supports one custom header and one custom footer owner, avoid loading another extension that calls `setHeader` or `setFooter`. Extensions using `setStatus` remain compatible and render below this package's footer information.
 
-Press Down from the draft's last line to enter footer-status selection. Continue with Up/Down to move through statuses, press Enter to open the selected inspector, or Escape to cancel; Up from the first status returns to the draft. The selected row uses the active theme's blue `selectedBg` treatment. Navigation is implemented by the main editor component rather than a global terminal listener, so it does not intercept keys from overlays, autocomplete, selectors, or the inspectors themselves.
+Press Down from the draft's last line to enter footer-status selection. Continue with Up/Down to move through statuses, press Enter to open the selected inspector, or Escape to cancel; Up from the first status returns to the draft. The selected status text uses simple inverted colors without extending the highlight across the remaining footer width. Navigation is implemented by the main editor component rather than a global terminal listener, so it does not intercept keys from overlays, autocomplete, selectors, or the inspectors themselves.
 
 ## Development
 

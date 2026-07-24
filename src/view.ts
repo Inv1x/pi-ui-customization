@@ -204,10 +204,7 @@ export function renderFooter(options: {
 				theme.fg("dim", "..."),
 			);
 			const truncated = selected ? sanitizeTerminalLabel(rendered) : rendered;
-			const fitted = `${truncated}${" ".repeat(Math.max(0, width - visibleWidth(truncated)))}`;
-			lines.push(
-				selected ? theme.bg("selectedBg", theme.fg("text", fitted)) : truncated,
-			);
+			lines.push(selected ? theme.inverse(truncated) : truncated);
 		}
 	}
 	return lines;
