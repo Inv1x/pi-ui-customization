@@ -205,7 +205,9 @@ export function renderFooter(options: {
 			);
 			const truncated = selected ? sanitizeTerminalLabel(rendered) : rendered;
 			const fitted = `${truncated}${" ".repeat(Math.max(0, width - visibleWidth(truncated)))}`;
-			lines.push(selected ? theme.inverse(fitted) : truncated);
+			lines.push(
+				selected ? theme.bg("selectedBg", theme.fg("text", fitted)) : truncated,
+			);
 		}
 	}
 	return lines;

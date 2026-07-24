@@ -3,9 +3,10 @@ import {
 	type ExtensionContext,
 	type KeybindingsManager,
 } from "@earendil-works/pi-coding-agent";
-import type {
-	AutocompleteProvider,
-	EditorComponent,
+import {
+	type AutocompleteProvider,
+	CURSOR_MARKER,
+	type EditorComponent,
 } from "@earendil-works/pi-tui";
 
 export const STATUS_ACTIVATION_EVENT = "pi-ui-customization:activate-status";
@@ -47,8 +48,8 @@ export class FooterNavigationState {
 			? keys.indexOf(this.selectedKey)
 			: direction > 0
 				? -1
-				: 0;
-		const next = (current + direction + keys.length) % keys.length;
+				: keys.length;
+		const next = Math.max(0, Math.min(keys.length - 1, current + direction));
 		this.selectedKey = keys[next];
 		return this.selectedKey;
 	}
@@ -67,9 +68,13 @@ type ComposableEditor = EditorComponent & {
 	onPasteImage?: () => void;
 	onExtensionShortcut?: (data: string) => boolean | undefined;
 	isShowingAutocomplete?: () => boolean;
+	getCursor?: () => { line: number; col: number };
+	getLines?: () => string[];
 };
 
 class FooterNavigationEditor implements EditorComponent {
+	private editorFocused = false;
+
 	constructor(
 		private readonly base: ComposableEditor,
 		private readonly keybindings: KeybindingsManager,
@@ -77,12 +82,18 @@ class FooterNavigationEditor implements EditorComponent {
 		private readonly getStatusKeys: () => string[],
 		private readonly activate: (key: string) => void,
 		private readonly requestRender: () => void,
+		private readonly boundaryNavigationEnabled: boolean,
 	) {}
 
 	get focused(): boolean {
-		return this.base.focused ?? false;
+		return this.editorFocused;
 	}
 	set focused(value: boolean) {
+		this.editorFocused = value;
+		if (!value && this.state.selectedKey) {
+			this.state.clear();
+			this.requestRender();
+		}
 		if ("focused" in this.base) this.base.focused = value;
 	}
 
@@ -142,7 +153,14 @@ class FooterNavigationEditor implements EditorComponent {
 	}
 
 	render(width: number): string[] {
-		return this.base.render(width);
+		this.state.reconcile(this.getStatusKeys());
+		if (this.state.selectedKey && this.base.isShowingAutocomplete?.())
+			this.state.clear();
+		if ("focused" in this.base) this.base.focused = this.editorFocused;
+		const lines = this.base.render(width);
+		return this.state.selectedKey
+			? lines.map((line) => this.hideDraftCursor(line))
+			: lines;
 	}
 
 	invalidate(): void {
@@ -152,15 +170,7 @@ class FooterNavigationEditor implements EditorComponent {
 	handleInput(data: string): void {
 		const keys = this.getStatusKeys();
 		this.state.reconcile(keys);
-		if (this.base.isShowingAutocomplete?.()) {
-			if (this.state.selectedKey) {
-				this.state.clear();
-				this.requestRender();
-			}
-			this.base.handleInput(data);
-			return;
-		}
-		if (this.base.getText().length > 0 || keys.length === 0) {
+		if (this.base.isShowingAutocomplete?.() || keys.length === 0) {
 			if (this.state.selectedKey) {
 				this.state.clear();
 				this.requestRender();
@@ -173,13 +183,18 @@ class FooterNavigationEditor implements EditorComponent {
 		const isDown = this.keybindings.matches(data, "tui.select.down");
 		const isConfirm = this.keybindings.matches(data, "tui.select.confirm");
 		const isCancel = this.keybindings.matches(data, "tui.select.cancel");
-		const willHandle =
-			isUp ||
-			isDown ||
-			(Boolean(this.state.selectedKey) && (isConfirm || isCancel));
-		if (willHandle && this.base.onExtensionShortcut?.(data)) return;
 
 		if (this.state.selectedKey) {
+			const willHandle = isUp || isDown || isConfirm || isCancel;
+			const checkedShortcut =
+				willHandle && Boolean(this.base.onExtensionShortcut);
+			if (willHandle && this.base.onExtensionShortcut?.(data)) return;
+			if (willHandle && this.matchesDelegatedAppAction(data, !isCancel)) {
+				this.state.clear();
+				this.requestRender();
+				this.delegateInput(data, checkedShortcut);
+				return;
+			}
 			if (isCancel) {
 				this.state.clear();
 				this.requestRender();
@@ -192,30 +207,134 @@ class FooterNavigationEditor implements EditorComponent {
 				this.activate(selected);
 				return;
 			}
-		}
-
-		if (isUp) {
-			this.state.move(keys, -1);
+			if (isUp) {
+				const selectedIndex = keys.indexOf(this.state.selectedKey);
+				if (selectedIndex <= 0) this.state.clear();
+				else this.state.move(keys, -1);
+				this.requestRender();
+				return;
+			}
+			if (isDown) {
+				this.state.move(keys, 1);
+				this.requestRender();
+				return;
+			}
+			this.state.clear();
 			this.requestRender();
+			this.base.handleInput(data);
 			return;
 		}
-		if (isDown) {
+
+		const isEditorDown = this.keybindings.matches(
+			data,
+			"tui.editor.cursorDown",
+		);
+		if (
+			this.boundaryNavigationEnabled &&
+			isEditorDown &&
+			!this.isBrowsingHistory() &&
+			this.isOnLastDraftLine()
+		) {
+			const checkedShortcut = Boolean(this.base.onExtensionShortcut);
+			if (this.base.onExtensionShortcut?.(data)) return;
+			if (this.matchesDelegatedAppAction(data, true)) {
+				this.delegateInput(data, checkedShortcut);
+				return;
+			}
 			this.state.move(keys, 1);
 			this.requestRender();
 			return;
 		}
-
-		if (this.state.selectedKey) {
-			this.state.clear();
-			this.requestRender();
-		}
 		this.base.handleInput(data);
+	}
+
+	private delegateInput(data: string, shortcutAlreadyChecked: boolean): void {
+		if (!shortcutAlreadyChecked || !this.base.onExtensionShortcut) {
+			this.base.handleInput(data);
+			return;
+		}
+		const shortcut = this.base.onExtensionShortcut;
+		this.base.onExtensionShortcut = undefined;
+		try {
+			this.base.handleInput(data);
+		} finally {
+			this.base.onExtensionShortcut = shortcut;
+		}
+	}
+
+	private matchesDelegatedAppAction(
+		data: string,
+		includeInterrupt: boolean,
+	): boolean {
+		for (const action of this.base.actionHandlers?.keys() ?? []) {
+			if (action === "app.interrupt" && !includeInterrupt) continue;
+			if (
+				this.keybindings.matches(
+					data,
+					action as Parameters<KeybindingsManager["matches"]>[1],
+				)
+			)
+				return true;
+		}
+		if (this.base.onCtrlD && this.keybindings.matches(data, "app.exit"))
+			return true;
+		if (
+			this.base.onPasteImage &&
+			this.keybindings.matches(data, "app.clipboard.pasteImage")
+		)
+			return true;
+		return Boolean(
+			includeInterrupt &&
+				this.base.onEscape &&
+				this.keybindings.matches(data, "app.interrupt"),
+		);
+	}
+
+	private hideDraftCursor(line: string): string {
+		const markerIndex = line.indexOf(CURSOR_MARKER);
+		if (markerIndex < 0) return line;
+		const inverseStart = "\u001b[7m";
+		const inverseEnd = "\u001b[0m";
+		const cursorStart = line.indexOf(
+			inverseStart,
+			markerIndex + CURSOR_MARKER.length,
+		);
+		if (cursorStart < 0)
+			return `${line.slice(0, markerIndex)}${line.slice(markerIndex + CURSOR_MARKER.length)}`;
+		const cursorEnd = line.indexOf(
+			inverseEnd,
+			cursorStart + inverseStart.length,
+		);
+		if (cursorEnd < 0) return line.slice(0, markerIndex);
+		const cursorText = line.slice(cursorStart + inverseStart.length, cursorEnd);
+		return `${line.slice(0, markerIndex)}${cursorText}${line.slice(cursorEnd + inverseEnd.length)}`;
+	}
+
+	private isBrowsingHistory(): boolean {
+		const historyIndex = (this.base as unknown as { historyIndex?: unknown })
+			.historyIndex;
+		return typeof historyIndex === "number" && historyIndex >= 0;
+	}
+
+	private isOnLastDraftLine(): boolean {
+		const visualBoundary = (
+			this.base as unknown as { isOnLastVisualLine?: () => boolean }
+		).isOnLastVisualLine;
+		if (visualBoundary) return visualBoundary.call(this.base);
+		const cursor = this.base.getCursor?.();
+		const lines = this.base.getLines?.();
+		if (!cursor || !lines?.length) return this.base.getText().length === 0;
+		return cursor.line >= lines.length - 1;
 	}
 
 	getText(): string {
 		return this.base.getText();
 	}
 	setText(text: string): void {
+		if (this.state.selectedKey) {
+			this.state.clear();
+			this.requestRender();
+		}
 		this.base.setText(text);
 	}
 	getExpandedText(): string {
@@ -225,6 +344,10 @@ class FooterNavigationEditor implements EditorComponent {
 		this.base.addToHistory?.(text);
 	}
 	insertTextAtCursor(text: string): void {
+		if (this.state.selectedKey) {
+			this.state.clear();
+			this.requestRender();
+		}
 		this.base.insertTextAtCursor?.(text);
 	}
 	setAutocompleteProvider(provider: AutocompleteProvider): void {
@@ -237,6 +360,7 @@ class FooterNavigationEditor implements EditorComponent {
 		this.base.setAutocompleteMaxVisible?.(maxVisible);
 	}
 	dispose(): void {
+		this.state.clear();
 		this.base.dispose?.();
 	}
 }
@@ -247,6 +371,7 @@ export function createFooterNavigationEditorFactory(
 	options: {
 		getStatusKeys: () => string[];
 		activate: (key: string) => void;
+		boundaryNavigationEnabled?: boolean;
 	},
 ): FooterEditorFactory {
 	return (tui, theme, keybindings) => {
@@ -260,6 +385,7 @@ export function createFooterNavigationEditorFactory(
 			options.getStatusKeys,
 			options.activate,
 			() => tui.requestRender(),
+			options.boundaryNavigationEnabled ?? previous === undefined,
 		);
 	};
 }

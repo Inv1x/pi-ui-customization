@@ -16,7 +16,7 @@ import {
 
 const theme = {
 	fg: (_color: string, text: string) => text,
-	inverse: (text: string) => `[inverse]${text}[/inverse]`,
+	bg: (_color: string, text: string) => `[selected]${text}[/selected]`,
 } as DashboardTheme;
 
 test("folder labels are compact and strip terminal escapes", () => {
@@ -83,7 +83,7 @@ test("footer keeps extension statuses sorted below its two information lines", (
 	assert.deepEqual(lines.slice(2), ["first", "second", "last"]);
 });
 
-test("footer inverts the full selected extension status row", () => {
+test("footer applies the theme-selected background to the full status row", () => {
 	const lines = renderFooter({
 		width: 40,
 		directory: "~/work/app",
@@ -100,11 +100,11 @@ test("footer inverts the full selected extension status row", () => {
 		theme,
 	});
 	assert.equal(lines[2], "1 terminal running · /ps");
-	assert.match(lines[3] ?? "", /^\[inverse\]1 agent running/);
-	assert.match(lines[3] ?? "", /\.\.\.\[\/inverse\]$/);
+	assert.match(lines[3] ?? "", /^\[selected\]1 agent running/);
+	assert.match(lines[3] ?? "", /\.\.\.\[\/selected\]$/);
 	assert.equal((lines[3] ?? "").includes("\u001b"), false);
 	assert.equal(
-		visibleWidth((lines[3] ?? "").replace(/\[(?:\/)?inverse\]/g, "")),
+		visibleWidth((lines[3] ?? "").replace(/\[(?:\/)?selected\]/g, "")),
 		40,
 	);
 });
