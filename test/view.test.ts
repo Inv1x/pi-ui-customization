@@ -4,6 +4,8 @@ import { visibleWidth } from "@earendil-works/pi-tui";
 import {
 	columns,
 	type DashboardTheme,
+	EMPTY_GIT_INFO,
+	EMPTY_MODEL_INFO,
 	formatDirectory,
 	formatTokens,
 	gradientText,
@@ -14,6 +16,7 @@ import {
 
 const theme = {
 	fg: (_color: string, text: string) => text,
+	inverse: (text: string) => `[inverse]${text}[/inverse]`,
 } as DashboardTheme;
 
 test("folder labels are compact and strip terminal escapes", () => {
@@ -78,4 +81,30 @@ test("footer keeps extension statuses sorted below its two information lines", (
 		/^13%\/128k · \$1\.23 · 42 tok\/s.*main · 1 file changed$/,
 	);
 	assert.deepEqual(lines.slice(2), ["first", "second", "last"]);
+});
+
+test("footer inverts the full selected extension status row", () => {
+	const lines = renderFooter({
+		width: 40,
+		directory: "~/work/app",
+		model: { ...EMPTY_MODEL_INFO },
+		git: { ...EMPTY_GIT_INFO },
+		statuses: new Map([
+			["background-terminals", "1 terminal running · /ps"],
+			[
+				"pi-subagents",
+				"\u001b[31m1 agent running\u001b[39m · $2.63 · /subagents-fleet",
+			],
+		]),
+		selectedStatusKey: "pi-subagents",
+		theme,
+	});
+	assert.equal(lines[2], "1 terminal running · /ps");
+	assert.match(lines[3] ?? "", /^\[inverse\]1 agent running/);
+	assert.match(lines[3] ?? "", /\.\.\.\[\/inverse\]$/);
+	assert.equal((lines[3] ?? "").includes("\u001b"), false);
+	assert.equal(
+		visibleWidth((lines[3] ?? "").replace(/\[(?:\/)?inverse\]/g, "")),
+		40,
+	);
 });

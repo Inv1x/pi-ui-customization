@@ -3,6 +3,13 @@ import type {
 	ExtensionContext,
 	ReadonlyFooterDataProvider,
 } from "@earendil-works/pi-coding-agent";
+import {
+	actionableStatusKeys,
+	createFooterNavigationEditorFactory,
+	type FooterEditorFactory,
+	FooterNavigationState,
+	STATUS_ACTIVATION_EVENT,
+} from "./footer-navigation.ts";
 import { loadGitInfo } from "./git.ts";
 import {
 	EMPTY_GIT_INFO,
@@ -82,6 +89,10 @@ export default function uiCustomization(pi: ExtensionAPI): void {
 	let gitInfo: GitInfo = { ...EMPTY_GIT_INFO };
 	let requestRender: (() => void) | undefined;
 	let activeTui: DashboardTui | undefined;
+	let footerDataProvider: ReadonlyFooterDataProvider | undefined;
+	let previousEditorFactory: FooterEditorFactory | undefined;
+	let installedEditorFactory: FooterEditorFactory | undefined;
+	const footerNavigation = new FooterNavigationState();
 	let gitTimer: ReturnType<typeof setInterval> | undefined;
 	let themeRemovalTimers: Array<ReturnType<typeof setTimeout>> = [];
 	let generation = 0;
@@ -178,20 +189,42 @@ export default function uiCustomization(pi: ExtensionAPI): void {
 			};
 		});
 		ctx.ui.setFooter((tui, theme, footerData: ReadonlyFooterDataProvider) => {
+			footerDataProvider = footerData;
 			requestRender = () => tui.requestRender();
 			return {
-				render: (width: number) =>
-					renderFooter({
+				render: (width: number) => {
+					const statuses = footerData.getExtensionStatuses();
+					footerNavigation.reconcile(actionableStatusKeys(statuses));
+					return renderFooter({
 						width,
 						directory,
 						model: modelInfo,
 						git: gitInfo,
-						statuses: footerData.getExtensionStatuses(),
+						statuses,
+						selectedStatusKey: footerNavigation.selectedKey,
 						theme,
-					}),
+					});
+				},
 				invalidate() {},
 			};
 		});
+		previousEditorFactory = ctx.ui.getEditorComponent();
+		installedEditorFactory = createFooterNavigationEditorFactory(
+			previousEditorFactory,
+			footerNavigation,
+			{
+				getStatusKeys: () =>
+					actionableStatusKeys(
+						footerDataProvider?.getExtensionStatuses() ?? new Map(),
+					),
+				activate: (key) => {
+					const sessionId = currentContext?.sessionManager.getSessionId();
+					if (!sessionId) return;
+					pi.events.emit(STATUS_ACTIVATION_EVENT, { key, sessionId });
+				},
+			},
+		);
+		ctx.ui.setEditorComponent(installedEditorFactory);
 		ctx.ui.setTitle(`pi · ${directory}`);
 	}
 
@@ -318,10 +351,16 @@ export default function uiCustomization(pi: ExtensionAPI): void {
 		pendingGitRefresh = false;
 		currentContext = undefined;
 		activeTui = undefined;
+		footerDataProvider = undefined;
 		requestRender = undefined;
+		footerNavigation.clear();
 		if (ctx.mode === "tui") {
 			ctx.ui.setHeader(undefined);
 			ctx.ui.setFooter(undefined);
+			if (ctx.ui.getEditorComponent() === installedEditorFactory)
+				ctx.ui.setEditorComponent(previousEditorFactory);
 		}
+		previousEditorFactory = undefined;
+		installedEditorFactory = undefined;
 	});
 }

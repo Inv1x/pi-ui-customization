@@ -164,9 +164,11 @@ export function renderFooter(options: {
 	model: ModelInfo;
 	git: GitInfo;
 	statuses: ReadonlyMap<string, string>;
+	selectedStatusKey?: string;
 	theme: DashboardTheme;
 }): string[] {
-	const { width, directory, model, git, statuses, theme } = options;
+	const { width, directory, model, git, statuses, selectedStatusKey, theme } =
+		options;
 	const contextPercent =
 		model.contextPercent === null
 			? "?"
@@ -190,11 +192,20 @@ export function renderFooter(options: {
 		columns(theme.fg("muted", usage), theme.fg("muted", gitLabel), width),
 	];
 
-	for (const [, status] of [...statuses].sort(([left], [right]) =>
+	for (const [key, status] of [...statuses].sort(([left], [right]) =>
 		left.localeCompare(right),
 	)) {
 		for (const line of status.split("\n")) {
-			lines.push(truncateToWidth(line, width, theme.fg("dim", "...")));
+			const selected = key === selectedStatusKey;
+			const visibleLine = selected ? sanitizeTerminalLabel(line) : line;
+			const rendered = truncateToWidth(
+				visibleLine,
+				width,
+				theme.fg("dim", "..."),
+			);
+			const truncated = selected ? sanitizeTerminalLabel(rendered) : rendered;
+			const fitted = `${truncated}${" ".repeat(Math.max(0, width - visibleWidth(truncated)))}`;
+			lines.push(selected ? theme.inverse(fitted) : truncated);
 		}
 	}
 	return lines;
