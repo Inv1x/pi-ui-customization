@@ -14,14 +14,14 @@ Model, context, cost, and Git data are collected directly by this package. The s
 
 ## Install
 
-From this repository:
+From this repository, install the local package persistently so `/reload` can rediscover it:
 
 ```bash
 npm install
-pi -e .
+pi install /absolute/path/to/pi-ui-customization
 ```
 
-Or add the absolute package path to Pi's package settings.
+Use `pi -e .` only for a temporary development smoke test. You can also add the absolute package path to Pi's package settings.
 
 ## Configuration
 
