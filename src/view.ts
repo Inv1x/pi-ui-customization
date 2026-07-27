@@ -34,6 +34,7 @@ export const EMPTY_MODEL_INFO: ModelInfo = {
 export const EMPTY_GIT_INFO: GitInfo = { changedFiles: 0 };
 
 const RESET = "\u001b[0m";
+const COLOR_RESET = "\u001b[39;49m";
 const BOLD = "\u001b[1m";
 const PALETTE: Rgb[] = [
 	[22, 83, 189],
@@ -72,6 +73,89 @@ export function sanitizeTerminalLabel(text: string): string {
 			/[\u0000-\u001f\u007f-\u009f]/g,
 			"",
 		);
+}
+
+function isColorCode(code: number): boolean {
+	return (
+		(code >= 30 && code <= 37) ||
+		code === 39 ||
+		(code >= 40 && code <= 47) ||
+		code === 49 ||
+		(code >= 90 && code <= 97) ||
+		(code >= 100 && code <= 107)
+	);
+}
+
+function retainedColorSgr(sequence: string): string {
+	if (!sequence.endsWith("m")) return "";
+	const introducerLength = sequence.startsWith("\u001b[")
+		? 2
+		: sequence.startsWith("\u009b")
+			? 1
+			: 0;
+	if (!introducerLength) return "";
+	const body = sequence.slice(introducerLength, -1);
+	if (body.includes(":")) return "";
+	const rawCodes = body ? body.split(";") : ["0"];
+	if (rawCodes.some((code) => code !== "" && !/^\d+$/.test(code))) return "";
+	const codes = rawCodes.map((code) => (code === "" ? 0 : Number(code)));
+	const retained: string[] = [];
+	for (let index = 0; index < codes.length; index++) {
+		const code = codes[index];
+		if (code === 0) {
+			// Preserve the enclosing inverse selection while resetting supplied colors.
+			retained.push("39;49");
+			continue;
+		}
+		if (code !== undefined && isColorCode(code)) {
+			retained.push(String(code));
+			continue;
+		}
+		if (code !== 38 && code !== 48) continue;
+		const mode = codes[index + 1];
+		if (mode === 5) {
+			const color = codes[index + 2];
+			if (color !== undefined && color >= 0 && color <= 255) {
+				retained.push(`${code};5;${color}`);
+				index += 2;
+			}
+			continue;
+		}
+		if (mode === 2) {
+			const red = codes[index + 2];
+			const green = codes[index + 3];
+			const blue = codes[index + 4];
+			if (
+				red !== undefined &&
+				green !== undefined &&
+				blue !== undefined &&
+				[red, green, blue].every((value) => value >= 0 && value <= 255)
+			) {
+				retained.push(`${code};2;${red};${green};${blue}`);
+				index += 4;
+			}
+		}
+	}
+	return retained.length ? `\u001b[${retained.join(";")}m` : "";
+}
+
+/** Keep only SGR foreground/background colors and strip other terminal controls. */
+export function sanitizeTerminalColors(text: string): string {
+	const withoutOsc = text.replace(OSC_PATTERN, "");
+	let result = "";
+	let retainedColor = false;
+	let offset = 0;
+	for (const match of withoutOsc.matchAll(CSI_PATTERN)) {
+		const index = match.index;
+		result += sanitizeTerminalLabel(withoutOsc.slice(offset, index));
+		const color = retainedColorSgr(match[0]);
+		if (color) retainedColor = true;
+		result += color;
+		offset = index + match[0].length;
+	}
+	result += sanitizeTerminalLabel(withoutOsc.slice(offset));
+	if (retainedColor && !result.endsWith(COLOR_RESET)) result += COLOR_RESET;
+	return result;
 }
 
 function mix(start: number, end: number, amount: number): number {
@@ -165,10 +249,19 @@ export function renderFooter(options: {
 	git: GitInfo;
 	statuses: ReadonlyMap<string, string>;
 	selectedStatusKey?: string;
+	preserveSelectedStatusColorKeys?: ReadonlySet<string>;
 	theme: DashboardTheme;
 }): string[] {
-	const { width, directory, model, git, statuses, selectedStatusKey, theme } =
-		options;
+	const {
+		width,
+		directory,
+		model,
+		git,
+		statuses,
+		selectedStatusKey,
+		preserveSelectedStatusColorKeys,
+		theme,
+	} = options;
 	const contextPercent =
 		model.contextPercent === null
 			? "?"
@@ -197,13 +290,18 @@ export function renderFooter(options: {
 	)) {
 		for (const line of status.split("\n")) {
 			const selected = key === selectedStatusKey;
-			const visibleLine = selected ? sanitizeTerminalLabel(line) : line;
+			const preserveSelectedColors =
+				selected && preserveSelectedStatusColorKeys?.has(key);
+			const sanitizeSelected = preserveSelectedColors
+				? sanitizeTerminalColors
+				: sanitizeTerminalLabel;
+			const visibleLine = selected ? sanitizeSelected(line) : line;
 			const rendered = truncateToWidth(
 				visibleLine,
 				width,
 				theme.fg("dim", "..."),
 			);
-			const truncated = selected ? sanitizeTerminalLabel(rendered) : rendered;
+			const truncated = selected ? sanitizeSelected(rendered) : rendered;
 			lines.push(selected ? theme.inverse(truncated) : truncated);
 		}
 	}

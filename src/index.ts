@@ -25,6 +25,30 @@ const GIT_REFRESH_MS = 3_000;
 const CHARS_PER_ESTIMATED_TOKEN = 4;
 const LIVE_UPDATE_INTERVAL_MS = 200;
 
+export const STATUS_OPTIONS_EVENT = "pi-ui-customization:status-options";
+
+interface StatusOptionsEvent {
+	key?: unknown;
+	preserveSelectedColors?: unknown;
+}
+
+export function applyStatusOptions(
+	preserveSelectedStatusColorKeys: Set<string>,
+	data: unknown,
+): boolean {
+	const options = data as StatusOptionsEvent;
+	if (
+		typeof options?.key !== "string" ||
+		!options.key ||
+		typeof options.preserveSelectedColors !== "boolean"
+	)
+		return false;
+	if (options.preserveSelectedColors)
+		preserveSelectedStatusColorKeys.add(options.key);
+	else preserveSelectedStatusColorKeys.delete(options.key);
+	return true;
+}
+
 interface RenderableNode {
 	children?: RenderableNode[];
 	invalidate(): void;
@@ -98,6 +122,11 @@ export default function uiCustomization(pi: ExtensionAPI): void {
 	let generation = 0;
 	let refreshingGit = false;
 	let pendingGitRefresh = false;
+	const preserveSelectedStatusColorKeys = new Set<string>();
+	const uninstallStatusOptions = pi.events.on(STATUS_OPTIONS_EVENT, (data) => {
+		if (applyStatusOptions(preserveSelectedStatusColorKeys, data))
+			requestRender?.();
+	});
 
 	let contentStreamStart: number | null = null;
 	let lastContentDeltaAt: number | null = null;
@@ -202,6 +231,7 @@ export default function uiCustomization(pi: ExtensionAPI): void {
 						git: gitInfo,
 						statuses,
 						selectedStatusKey: footerNavigation.selectedKey,
+						preserveSelectedStatusColorKeys,
 						theme,
 					});
 				},
@@ -362,5 +392,6 @@ export default function uiCustomization(pi: ExtensionAPI): void {
 		}
 		previousEditorFactory = undefined;
 		installedEditorFactory = undefined;
+		uninstallStatusOptions();
 	});
 }

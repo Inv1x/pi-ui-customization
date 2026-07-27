@@ -11,6 +11,7 @@ import {
 	gradientText,
 	renderFooter,
 	renderHeader,
+	sanitizeTerminalColors,
 	sanitizeTerminalLabel,
 } from "../src/view.ts";
 
@@ -32,6 +33,25 @@ test("folder labels are compact and strip terminal escapes", () => {
 	assert.equal(
 		sanitizeTerminalLabel("branch\u001b]0;forged-title\u0007-name"),
 		"branch-name",
+	);
+});
+
+test("selected status color sanitization preserves only color SGR", () => {
+	assert.equal(
+		sanitizeTerminalColors(
+			"\u001b]0;forged-title\u0007\u001b[1;38;2;90;128;128mteal\u001b[0m\u001b[2J!",
+		),
+		"\u001b[38;2;90;128;128mteal\u001b[39;49m!\u001b[39;49m",
+	);
+	assert.equal(
+		sanitizeTerminalColors(
+			"\u001b[31mred\u001b[39m \u001b[48;5;24mblue\u001b[49m",
+		),
+		"\u001b[31mred\u001b[39m \u001b[48;5;24mblue\u001b[49m\u001b[39;49m",
+	);
+	assert.equal(
+		sanitizeTerminalColors("\u001b[31munclosed"),
+		"\u001b[31munclosed\u001b[39;49m",
 	);
 });
 
@@ -108,4 +128,20 @@ test("footer inverts only the selected status text", () => {
 	assert.ok(
 		visibleWidth((lines[3] ?? "").replace(/\[(?:\/)?inverse\]/g, "")) < 80,
 	);
+});
+
+test("footer preserves opted-in selected status colors", () => {
+	const coloredStatus =
+		"\u001b[38;2;90;128;128m1 agent running · $2.63 · /subagents-fleet\u001b[39m";
+	const lines = renderFooter({
+		width: 80,
+		directory: "~/work/app",
+		model: { ...EMPTY_MODEL_INFO },
+		git: { ...EMPTY_GIT_INFO },
+		statuses: new Map([["pi-subagents", coloredStatus]]),
+		selectedStatusKey: "pi-subagents",
+		preserveSelectedStatusColorKeys: new Set(["pi-subagents"]),
+		theme,
+	});
+	assert.equal(lines[2], `[inverse]${coloredStatus}\u001b[39;49m[/inverse]`);
 });
