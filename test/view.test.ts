@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { visibleWidth } from "@earendil-works/pi-tui";
+import {
+	type Terminal,
+	TuiAltScreen,
+	TuiMainScreen,
+	visibleWidth,
+} from "@earendil-works/pi-tui";
 import {
 	columns,
 	type DashboardTheme,
@@ -128,6 +133,48 @@ test("footer inverts only the selected status text", () => {
 	assert.ok(
 		visibleWidth((lines[3] ?? "").replace(/\[(?:\/)?inverse\]/g, "")) < 80,
 	);
+});
+
+test("header and footer render in regular and fullscreen TUI implementations", () => {
+	const terminal = {
+		columns: 100,
+		rows: 30,
+		kittyProtocolActive: false,
+		start() {},
+		stop() {},
+		async drainInput() {},
+		write() {},
+		moveBy() {},
+		hideCursor() {},
+		showCursor() {},
+		clearLine() {},
+		clearFromCursor() {},
+		clearScreen() {},
+		setTitle() {},
+		setProgress() {},
+	} as Terminal;
+	for (const tui of [new TuiMainScreen(terminal), new TuiAltScreen(terminal)]) {
+		tui.addChild({
+			render: (width) => [
+				...renderHeader("~/work/app", width),
+				...renderFooter({
+					width,
+					directory: "~/work/app",
+					model: { ...EMPTY_MODEL_INFO },
+					git: { branch: "main", changedFiles: 0 },
+					statuses: new Map(),
+					theme,
+				}),
+			],
+			invalidate() {},
+		});
+		for (const width of [1, 12, 80, 160]) {
+			assert.ok(
+				tui.render(width).every((line) => visibleWidth(line) <= width),
+				tui.mode,
+			);
+		}
+	}
 });
 
 test("footer preserves opted-in selected status colors", () => {

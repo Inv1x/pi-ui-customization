@@ -1,20 +1,29 @@
 # pi-ui-customization
 
-A standalone UI package for [Pi](https://github.com/earendil-works/pi), targeting Pi 0.81.1.
+A standalone startup header and information-rich footer for [Pi](https://github.com/earendil-works/pi).
 
 It installs:
 
 - a centered blue-gradient Pi logo and current-folder startup header;
-- a two-line footer with folder, provider/model, thinking level, context use, session cost, generation speed, Git branch, and changed-file count;
+- a two-line footer with folder, provider/model, thinking level, context use, complete persisted session cost, generation speed, Git branch, and changed-file count;
 - all other extensions' status lines below those two information rows;
-- `Up`/`Down` selection for the background-terminal and subagent status rows, with `Enter` opening `/ps` or `/subagents-fleet`;
-- the redundant startup `[Themes]` resource section hidden, matching the reference layout.
+- `Up`/`Down` selection for the background-terminal and subagent status rows, with `Enter` opening `/ps` or `/subagents-fleet` through a typed cross-extension event contract.
 
-Model, context, cost, and Git data are collected directly by this package. The separate `model-info` and `git-info` extensions from the reference setup are not required. Git refreshes run asynchronously and quietly degrade outside a repository.
+Model, context, cost, and Git data are collected directly by this package. The separate `model-info` and `git-info` extensions from the reference setup are not required. Pi's supported footer provider supplies the branch reactively; only changed-file count is polled, and Git failures quietly degrade outside a repository.
+
+The cost includes persisted assistant usage, nested model usage reported by tools, compaction summaries, and branch summaries on the active branch.
+
+## Requirements and compatibility
+
+- Node.js 22.19 or newer.
+- Tested floor: `@earendil-works/pi-coding-agent` and `@earendil-works/pi-tui` 0.84.1.
+- Both regular/main-screen and fullscreen/alternate-screen TUI modes are supported. Components honor every render width and do not depend on a concrete renderer.
+
+Pi's core packages remain unbundled `peerDependencies` with `"*"` ranges, as required for Pi packages. Development and CI pin 0.84.1 to continuously test the documented floor.
 
 ## Install
 
-From this repository, install the local package persistently so `/reload` can rediscover it:
+Install the package persistently so `/reload` can rediscover it:
 
 ```bash
 npm install
@@ -23,38 +32,62 @@ pi install /absolute/path/to/pi-ui-customization
 
 Use `pi -e .` only for a temporary development smoke test. You can also add the absolute package path to Pi's package settings.
 
-## Configuration
+## Configuration and behavior
 
-No configuration file is required. The package uses the active Pi theme for footer text and a fixed blue RGB gradient for the logo. Git state refreshes at startup, after input/tool activity and turns, and every three seconds while the TUI session is open.
+No configuration file is required. The package uses the active Pi theme for footer text and a fixed blue RGB gradient for the logo. Changed-file state refreshes at startup, after input/tool activity and turns, and every three seconds while a TUI session is open.
 
 Because Pi supports one custom header and one custom footer owner, avoid loading another extension that calls `setHeader` or `setFooter`. Extensions using `setStatus` remain compatible and render below this package's footer information.
 
-Press `Down` from the draft's last line to enter footer-status selection. Continue with `Up`/`Down` to move through statuses, press `Enter` to open the selected inspector, or `Esc` to cancel; `Up` from the first status returns to the draft. The selected status text uses simple inverted colors without extending the highlight across the remaining footer width. Navigation is implemented by the main editor component rather than a global terminal listener, so it does not intercept keys from overlays, autocomplete, selectors, or the inspectors themselves.
+Press `Down` from the draft's last visual line to enter footer-status selection. Continue with `Up`/`Down`, press `Enter` to open the selected inspector, or `Esc` to cancel; `Up` from the first status returns to the draft. Autocomplete, history, remapped app keys, overlays, and an existing custom editor retain first ownership of input.
 
-By default, selection strips embedded terminal styling before inversion. A status-producing extension can opt its own status key into preserving foreground/background colors:
+This package intentionally does **not** hide Pi's startup `[Themes]` resource section. Pi 0.84.1 has no public API for suppressing that section, and mutating private TUI children or matching rendered text is brittle across renderers and reloads.
+
+On reload, new, resume, fork, and quit shutdown flows, the package clears timers and subscriptions, restores the previous editor factory when it still owns the editor, removes its header/footer, and resets the terminal title to `pi`. Pi does not expose the previous title, so exact third-party title restoration is not possible.
+
+## Inspector event contracts
+
+The package exports stable constants and payload interfaces from its main entry point:
 
 ```typescript
-pi.on("session_start", () => {
-  pi.events.emit("pi-ui-customization:status-options", {
-    key: "my-extension",
-    preserveSelectedColors: true,
-  });
-});
+import {
+  STATUS_ACTIVATION_EVENT,
+  STATUS_OPTIONS_EVENT,
+  type StatusActivationEvent,
+  type StatusOptionsEvent,
+  type UiCustomizationEventMap,
+} from "@inv1x/pi-ui-customization";
 ```
 
-Basic ANSI colors and semicolon-form 256/RGB SGR colors are retained. Other styling, OSC commands, cursor movement, and terminal controls remain stripped. Emit the same event with `preserveSelectedColors: false` to remove the opt-in.
+A status-producing extension can preserve foreground/background colors while its row is selected:
+
+```typescript
+const options: StatusOptionsEvent = {
+  key: "my-extension",
+  preserveSelectedColors: true,
+};
+pi.events.emit(STATUS_OPTIONS_EVENT, options);
+```
+
+Emit `preserveSelectedColors: false` to remove the opt-in. Basic ANSI colors and semicolon-form 256/RGB SGR colors are retained. Other styling, OSC commands, cursor movement, and terminal controls are stripped.
+
+Inspector owners can listen for activation:
+
+```typescript
+pi.events.on(STATUS_ACTIVATION_EVENT, (data) => {
+  const activation = data as StatusActivationEvent;
+  // Validate the session id, then open the matching inspector.
+});
+```
 
 ## Development
 
 ```bash
 npm install
-npm run check
-npm run typecheck
-npm test
+npm run validate
 npm pack --dry-run
 ```
 
-The implementation uses Node promises and timers and has no Effect dependency.
+`prepack` runs the complete validation gate. CI tests the Node floor and a current Node release, then verifies the npm tarball.
 
 ## Credits
 

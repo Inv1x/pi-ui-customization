@@ -1,12 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { countChangedFiles, type GitRunner, loadGitInfo } from "../src/git.ts";
+import {
+	countChangedFiles,
+	type GitRunner,
+	loadChangedFileCount,
+} from "../src/git.ts";
 
 function runner(
 	outputs: Record<string, { code: number; stdout: string }>,
+	calls: string[] = [],
 ): GitRunner {
-	return async (_cwd, args) =>
-		outputs[args.join(" ")] ?? { code: 1, stdout: "" };
+	return async (_cwd, args) => {
+		calls.push(args.join(" "));
+		return outputs[args.join(" ")] ?? { code: 1, stdout: "" };
+	};
 }
 
 test("changed file count includes tracked and untracked porcelain rows", () => {
@@ -14,30 +21,24 @@ test("changed file count includes tracked and untracked porcelain rows", () => {
 	assert.equal(countChangedFiles(" M src/a.ts\n?? src/b.ts\n"), 2);
 });
 
-test("git state reports branch and changed files", async () => {
-	const state = await loadGitInfo(
+test("changed-file refresh runs only git status", async () => {
+	const calls: string[] = [];
+	const count = await loadChangedFileCount(
 		"/repo",
-		runner({
-			"branch --show-current": { code: 0, stdout: "feature/ui\n" },
-			"rev-parse --short HEAD": { code: 0, stdout: "abc1234\n" },
-			"status --porcelain=v1 --untracked-files=all": {
-				code: 0,
-				stdout: " M src/index.ts\n?? test/new.test.ts\n",
+		runner(
+			{
+				"status --porcelain=v1 --untracked-files=all": {
+					code: 0,
+					stdout: " M src/index.ts\n?? test/new.test.ts\n",
+				},
 			},
-		}),
+			calls,
+		),
 	);
-	assert.deepEqual(state, { branch: "feature/ui", changedFiles: 2 });
+	assert.equal(count, 2);
+	assert.deepEqual(calls, ["status --porcelain=v1 --untracked-files=all"]);
 });
 
-test("git state handles detached heads and non-repositories", async () => {
-	const detached = await loadGitInfo(
-		"/repo",
-		runner({
-			"branch --show-current": { code: 0, stdout: "" },
-			"rev-parse --short HEAD": { code: 0, stdout: "deadbee\n" },
-			"status --porcelain=v1 --untracked-files=all": { code: 0, stdout: "" },
-		}),
-	);
-	assert.deepEqual(detached, { branch: "detached@deadbee", changedFiles: 0 });
-	assert.deepEqual(await loadGitInfo("/tmp", runner({})), { changedFiles: 0 });
+test("changed-file refresh quietly handles non-repositories", async () => {
+	assert.equal(await loadChangedFileCount("/tmp", runner({})), 0);
 });

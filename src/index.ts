@@ -2,15 +2,20 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 	ReadonlyFooterDataProvider,
+	SessionEntry,
 } from "@earendil-works/pi-coding-agent";
+import {
+	STATUS_ACTIVATION_EVENT,
+	STATUS_OPTIONS_EVENT,
+	type StatusOptionsEvent,
+} from "./contracts.ts";
 import {
 	actionableStatusKeys,
 	createFooterNavigationEditorFactory,
 	type FooterEditorFactory,
 	FooterNavigationState,
-	STATUS_ACTIVATION_EVENT,
 } from "./footer-navigation.ts";
-import { loadGitInfo } from "./git.ts";
+import { loadChangedFileCount } from "./git.ts";
 import {
 	EMPTY_GIT_INFO,
 	EMPTY_MODEL_INFO,
@@ -19,24 +24,28 @@ import {
 	type ModelInfo,
 	renderFooter,
 	renderHeader,
+	sanitizeTerminalLabel,
 } from "./view.ts";
 
 const GIT_REFRESH_MS = 3_000;
 const CHARS_PER_ESTIMATED_TOKEN = 4;
 const LIVE_UPDATE_INTERVAL_MS = 200;
 
-export const STATUS_OPTIONS_EVENT = "pi-ui-customization:status-options";
-
-interface StatusOptionsEvent {
-	key?: unknown;
-	preserveSelectedColors?: unknown;
-}
+export type {
+	StatusActivationEvent,
+	StatusOptionsEvent,
+	UiCustomizationEventMap,
+} from "./contracts.ts";
+export {
+	STATUS_ACTIVATION_EVENT,
+	STATUS_OPTIONS_EVENT,
+} from "./contracts.ts";
 
 export function applyStatusOptions(
 	preserveSelectedStatusColorKeys: Set<string>,
 	data: unknown,
 ): boolean {
-	const options = data as StatusOptionsEvent;
+	const options = data as Partial<StatusOptionsEvent> | undefined;
 	if (
 		typeof options?.key !== "string" ||
 		!options.key ||
@@ -49,55 +58,22 @@ export function applyStatusOptions(
 	return true;
 }
 
-interface RenderableNode {
-	children?: RenderableNode[];
-	invalidate(): void;
-	render(width: number): string[];
+function usageCost(usage: { cost: { total: number } } | undefined): number {
+	const total = usage?.cost.total;
+	return typeof total === "number" && Number.isFinite(total) ? total : 0;
 }
 
-interface DashboardTui extends RenderableNode {
-	requestRender(force?: boolean): void;
-}
-
-// Strip styling before matching startup resource section labels.
-const ANSI_PATTERN =
-	// biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape matcher
-	/[\u001B\u009B][[\]()#;?]*(?:(?:(?:[a-zA-Z\d]*(?:;[a-zA-Z\d]*)*)?\u0007)|(?:(?:\d{1,4}(?:;\d{0,4})*)?[\dA-PR-TZcf-nq-uy=><~]))/g;
-
-function renderedText(component: RenderableNode): string {
-	try {
-		return component.render(200).join("\n").replace(ANSI_PATTERN, "");
-	} catch {
-		return "";
-	}
-}
-
-function hideThemesSection(component: RenderableNode): boolean {
-	if (!Array.isArray(component.children)) return false;
-	for (let index = 0; index < component.children.length; index++) {
-		const child = component.children[index];
-		if (!child) continue;
-		const firstLine = renderedText(child)
-			.split("\n")
-			.find((line) => line.trim())
-			?.trim();
-		if (firstLine === "[Themes]") {
-			const next = component.children[index + 1];
-			const removeCount = next && renderedText(next).trim() === "" ? 2 : 1;
-			component.children.splice(index, removeCount);
-			component.invalidate();
-			return true;
-		}
-		if (hideThemesSection(child)) return true;
-	}
-	return false;
-}
-
-function sessionCost(ctx: ExtensionContext): number {
+/** Sum every persisted model usage record on the active session branch. */
+export function sessionCost(entries: readonly SessionEntry[]): number {
 	let total = 0;
-	for (const entry of ctx.sessionManager.getBranch()) {
-		if (entry.type === "message" && entry.message.role === "assistant") {
-			total += entry.message.usage.cost.total;
+	for (const entry of entries) {
+		if (entry.type === "message") {
+			if (entry.message.role === "assistant")
+				total += usageCost(entry.message.usage);
+			else if (entry.message.role === "toolResult")
+				total += usageCost(entry.message.usage);
+		} else if (entry.type === "compaction" || entry.type === "branch_summary") {
+			total += usageCost(entry.usage);
 		}
 	}
 	return total;
@@ -112,13 +88,11 @@ export default function uiCustomization(pi: ExtensionAPI): void {
 	let modelInfo: ModelInfo = { ...EMPTY_MODEL_INFO };
 	let gitInfo: GitInfo = { ...EMPTY_GIT_INFO };
 	let requestRender: (() => void) | undefined;
-	let activeTui: DashboardTui | undefined;
 	let footerDataProvider: ReadonlyFooterDataProvider | undefined;
 	let previousEditorFactory: FooterEditorFactory | undefined;
 	let installedEditorFactory: FooterEditorFactory | undefined;
 	const footerNavigation = new FooterNavigationState();
 	let gitTimer: ReturnType<typeof setInterval> | undefined;
-	let themeRemovalTimers: Array<ReturnType<typeof setTimeout>> = [];
 	let generation = 0;
 	let refreshingGit = false;
 	let pendingGitRefresh = false;
@@ -156,15 +130,15 @@ export default function uiCustomization(pi: ExtensionAPI): void {
 			...modelInfo,
 			provider: model?.provider ?? "",
 			modelId: model?.id ?? "no-model",
-			thinking: model?.reasoning ? pi.getThinkingLevel() : "off",
+			thinking: model?.reasoning ? (ctx.thinkingLevel ?? "off") : "off",
 			contextWindow: usage?.contextWindow ?? model?.contextWindow ?? 0,
 			contextPercent: usage?.percent ?? null,
-			cost: sessionCost(ctx),
+			cost: sessionCost(ctx.sessionManager.getBranch()),
 		};
 		requestRender?.();
 	}
 
-	async function refreshGit(ctx = currentContext): Promise<void> {
+	async function refreshChangedFiles(ctx = currentContext): Promise<void> {
 		if (ctx?.mode !== "tui") return;
 		currentContext = ctx;
 		if (refreshingGit) {
@@ -174,9 +148,9 @@ export default function uiCustomization(pi: ExtensionAPI): void {
 		refreshingGit = true;
 		const refreshGeneration = generation;
 		try {
-			const nextGitInfo = await loadGitInfo(ctx.cwd);
+			const changedFiles = await loadChangedFileCount(ctx.cwd);
 			if (refreshGeneration === generation && currentContext?.cwd === ctx.cwd) {
-				gitInfo = nextGitInfo;
+				gitInfo = { changedFiles };
 				requestRender?.();
 			}
 		} catch {
@@ -188,20 +162,8 @@ export default function uiCustomization(pi: ExtensionAPI): void {
 			refreshingGit = false;
 			if (pendingGitRefresh) {
 				pendingGitRefresh = false;
-				void refreshGit();
+				void refreshChangedFiles();
 			}
-		}
-	}
-
-	function scheduleThemeRemoval(tui: DashboardTui): void {
-		for (const timer of themeRemovalTimers) clearTimeout(timer);
-		themeRemovalTimers = [];
-		for (const delay of [0, 50, 250, 1_000]) {
-			const timer = setTimeout(() => {
-				if (hideThemesSection(tui)) tui.requestRender(true);
-			}, delay);
-			timer.unref?.();
-			themeRemovalTimers.push(timer);
 		}
 	}
 
@@ -209,9 +171,7 @@ export default function uiCustomization(pi: ExtensionAPI): void {
 		if (ctx.mode !== "tui") return;
 		const directory = formatDirectory(ctx.cwd);
 		ctx.ui.setHeader((tui) => {
-			activeTui = tui as DashboardTui;
 			requestRender = () => tui.requestRender();
-			scheduleThemeRemoval(activeTui);
 			return {
 				render: (width: number) => renderHeader(directory, width),
 				invalidate() {},
@@ -220,15 +180,19 @@ export default function uiCustomization(pi: ExtensionAPI): void {
 		ctx.ui.setFooter((tui, theme, footerData: ReadonlyFooterDataProvider) => {
 			footerDataProvider = footerData;
 			requestRender = () => tui.requestRender();
+			const unsubscribeBranch = footerData.onBranchChange(() =>
+				tui.requestRender(),
+			);
 			return {
 				render: (width: number) => {
 					const statuses = footerData.getExtensionStatuses();
+					const branch = sanitizeTerminalLabel(footerData.getGitBranch() ?? "");
 					footerNavigation.reconcile(actionableStatusKeys(statuses));
 					return renderFooter({
 						width,
 						directory,
 						model: modelInfo,
-						git: gitInfo,
+						git: { ...gitInfo, branch: branch || undefined },
 						statuses,
 						selectedStatusKey: footerNavigation.selectedKey,
 						preserveSelectedStatusColorKeys,
@@ -236,6 +200,10 @@ export default function uiCustomization(pi: ExtensionAPI): void {
 					});
 				},
 				invalidate() {},
+				dispose() {
+					unsubscribeBranch();
+					if (footerDataProvider === footerData) footerDataProvider = undefined;
+				},
 			};
 		});
 		previousEditorFactory = ctx.ui.getEditorComponent();
@@ -269,16 +237,13 @@ export default function uiCustomization(pi: ExtensionAPI): void {
 		resetMessageTracking();
 		install(ctx);
 		refreshModel(ctx);
-		void refreshGit(ctx);
+		void refreshChangedFiles(ctx);
 		if (ctx.mode === "tui") {
-			gitTimer = setInterval(() => void refreshGit(), GIT_REFRESH_MS);
+			gitTimer = setInterval(() => void refreshChangedFiles(), GIT_REFRESH_MS);
 			gitTimer.unref?.();
 		}
 	});
 
-	pi.on("resources_discover", () => {
-		if (activeTui) scheduleThemeRemoval(activeTui);
-	});
 	pi.on("model_select", (_event, ctx) => refreshModel(ctx));
 	pi.on("thinking_level_select", (_event, ctx) => refreshModel(ctx));
 	pi.on("agent_start", (_event, ctx) => {
@@ -363,24 +328,21 @@ export default function uiCustomization(pi: ExtensionAPI): void {
 	});
 	pi.on("turn_end", (_event, ctx) => {
 		refreshModel(ctx);
-		void refreshGit(ctx);
+		void refreshChangedFiles(ctx);
 	});
 	pi.on("agent_settled", (_event, ctx) => refreshModel(ctx));
 	pi.on("input", (_event, ctx) => {
-		void refreshGit(ctx);
+		void refreshChangedFiles(ctx);
 		return { action: "continue" };
 	});
-	pi.on("tool_execution_end", (_event, ctx) => void refreshGit(ctx));
+	pi.on("tool_execution_end", (_event, ctx) => void refreshChangedFiles(ctx));
 
 	pi.on("session_shutdown", (_event, ctx) => {
 		generation += 1;
 		if (gitTimer) clearInterval(gitTimer);
 		gitTimer = undefined;
-		for (const timer of themeRemovalTimers) clearTimeout(timer);
-		themeRemovalTimers = [];
 		pendingGitRefresh = false;
 		currentContext = undefined;
-		activeTui = undefined;
 		footerDataProvider = undefined;
 		requestRender = undefined;
 		footerNavigation.clear();
@@ -389,6 +351,7 @@ export default function uiCustomization(pi: ExtensionAPI): void {
 			ctx.ui.setFooter(undefined);
 			if (ctx.ui.getEditorComponent() === installedEditorFactory)
 				ctx.ui.setEditorComponent(previousEditorFactory);
+			ctx.ui.setTitle("pi");
 		}
 		previousEditorFactory = undefined;
 		installedEditorFactory = undefined;

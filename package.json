@@ -4,6 +4,21 @@
 	"description": "Standalone startup header and information-rich footer for Pi",
 	"type": "module",
 	"license": "MIT",
+	"author": "Inv1x",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Inv1x/pi-ui-customization.git"
+	},
+	"homepage": "https://github.com/Inv1x/pi-ui-customization#readme",
+	"bugs": {
+		"url": "https://github.com/Inv1x/pi-ui-customization/issues"
+	},
+	"engines": {
+		"node": ">=22.19"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
 	"keywords": [
 		"pi-package",
 		"pi-coding-agent",
@@ -14,6 +29,7 @@
 	"files": [
 		"src",
 		"README.md",
+		"CHANGELOG.md",
 		"LICENSE"
 	],
 	"exports": {
@@ -32,12 +48,14 @@
 		"check": "biome check .",
 		"check:fix": "biome check --write .",
 		"typecheck": "tsc --noEmit",
-		"test": "node --import jiti/register --test test/*.test.ts"
+		"test": "node --import jiti/register --test test/*.test.ts",
+		"validate": "npm run check && npm run typecheck && npm test",
+		"prepack": "npm run validate"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.5.5",
-		"@earendil-works/pi-coding-agent": "0.81.1",
-		"@earendil-works/pi-tui": "0.81.1",
+		"@earendil-works/pi-coding-agent": "0.84.1",
+		"@earendil-works/pi-tui": "0.84.1",
 		"@types/node": "^26.1.1",
 		"jiti": "^2.7.0",
 		"typescript": "^7.0.2"

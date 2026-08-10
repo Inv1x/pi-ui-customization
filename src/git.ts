@@ -1,6 +1,4 @@
 import { execFile } from "node:child_process";
-import type { GitInfo } from "./view.ts";
-import { EMPTY_GIT_INFO, sanitizeTerminalLabel } from "./view.ts";
 
 const GIT_TIMEOUT_MS = 2_500;
 
@@ -47,26 +45,18 @@ export function countChangedFiles(status: string): number {
 	return status.split("\n").filter(Boolean).length;
 }
 
-export async function loadGitInfo(
+/**
+ * Refresh only the data Pi's reactive footer provider does not expose.
+ * Branch state comes from footerData.getGitBranch()/onBranchChange().
+ */
+export async function loadChangedFileCount(
 	cwd: string,
 	runner: GitRunner = runGit,
-): Promise<GitInfo> {
-	const [branchResult, headResult, statusResult] = await Promise.all([
-		runner(cwd, ["branch", "--show-current"]),
-		runner(cwd, ["rev-parse", "--short", "HEAD"]),
-		runner(cwd, ["status", "--porcelain=v1", "--untracked-files=all"]),
+): Promise<number> {
+	const result = await runner(cwd, [
+		"status",
+		"--porcelain=v1",
+		"--untracked-files=all",
 	]);
-	if (branchResult.code !== 0 && headResult.code !== 0) {
-		return { ...EMPTY_GIT_INFO };
-	}
-
-	const branchName = sanitizeTerminalLabel(branchResult.stdout.trim());
-	const shortHead = sanitizeTerminalLabel(headResult.stdout.trim());
-	const branch =
-		branchName || (shortHead ? `detached@${shortHead}` : "detached");
-	return {
-		branch,
-		changedFiles:
-			statusResult.code === 0 ? countChangedFiles(statusResult.stdout) : 0,
-	};
+	return result.code === 0 ? countChangedFiles(result.stdout) : 0;
 }

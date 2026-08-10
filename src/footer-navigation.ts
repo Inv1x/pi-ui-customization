@@ -9,7 +9,8 @@ import {
 	type EditorComponent,
 } from "@earendil-works/pi-tui";
 
-export const STATUS_ACTIVATION_EVENT = "pi-ui-customization:activate-status";
+export type { StatusActivationEvent as StatusActivation } from "./contracts.ts";
+export { STATUS_ACTIVATION_EVENT } from "./contracts.ts";
 
 export type FooterEditorFactory = NonNullable<
 	ReturnType<ExtensionContext["ui"]["getEditorComponent"]>
@@ -19,11 +20,6 @@ const ACTIONABLE_STATUS_KEYS = new Set([
 	"background-terminals",
 	"pi-subagents",
 ]);
-
-export interface StatusActivation {
-	key: string;
-	sessionId: string;
-}
 
 export function actionableStatusKeys(
 	statuses: ReadonlyMap<string, string>,
