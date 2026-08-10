@@ -64,8 +64,6 @@ type ComposableEditor = EditorComponent & {
 	onPasteImage?: () => void;
 	onExtensionShortcut?: (data: string) => boolean | undefined;
 	isShowingAutocomplete?: () => boolean;
-	getCursor?: () => { line: number; col: number };
-	getLines?: () => string[];
 };
 
 class FooterNavigationEditor implements EditorComponent {
@@ -228,8 +226,7 @@ class FooterNavigationEditor implements EditorComponent {
 		if (
 			this.boundaryNavigationEnabled &&
 			isEditorDown &&
-			!this.isBrowsingHistory() &&
-			this.isOnLastDraftLine()
+			this.base.getText().length === 0
 		) {
 			const checkedShortcut = Boolean(this.base.onExtensionShortcut);
 			if (this.base.onExtensionShortcut?.(data)) return;
@@ -304,23 +301,6 @@ class FooterNavigationEditor implements EditorComponent {
 		if (cursorEnd < 0) return line.slice(0, markerIndex);
 		const cursorText = line.slice(cursorStart + inverseStart.length, cursorEnd);
 		return `${line.slice(0, markerIndex)}${cursorText}${line.slice(cursorEnd + inverseEnd.length)}`;
-	}
-
-	private isBrowsingHistory(): boolean {
-		const historyIndex = (this.base as unknown as { historyIndex?: unknown })
-			.historyIndex;
-		return typeof historyIndex === "number" && historyIndex >= 0;
-	}
-
-	private isOnLastDraftLine(): boolean {
-		const visualBoundary = (
-			this.base as unknown as { isOnLastVisualLine?: () => boolean }
-		).isOnLastVisualLine;
-		if (visualBoundary) return visualBoundary.call(this.base);
-		const cursor = this.base.getCursor?.();
-		const lines = this.base.getLines?.();
-		if (!cursor || !lines?.length) return this.base.getText().length === 0;
-		return cursor.line >= lines.length - 1;
 	}
 
 	getText(): string {

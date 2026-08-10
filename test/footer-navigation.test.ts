@@ -41,20 +41,14 @@ test("actionable footer statuses use stable sorted extension keys", () => {
 	);
 });
 
-test("Down enters footer from the draft's last line and Up returns", () => {
+test("Down enters footer from an empty draft and Up returns", () => {
 	let text = "";
-	let lines = [""];
-	let lastVisualLine = true;
-	const cursor = { line: 0, col: 0 };
 	const delegated: string[] = [];
 	const activated: string[] = [];
 	let renders = 0;
 	const base: EditorComponent & {
 		focused: boolean;
 		actionHandlers: Map<string, () => void>;
-		isOnLastVisualLine(): boolean;
-		getLines(): string[];
-		getCursor(): { line: number; col: number };
 	} = {
 		focused: false,
 		actionHandlers: new Map([["app.clear", () => {}]]),
@@ -66,12 +60,8 @@ test("Down enters footer from the draft's last line and Up returns", () => {
 		invalidate: () => {},
 		handleInput: (data: string) => delegated.push(data),
 		getText: () => text,
-		isOnLastVisualLine: () => lastVisualLine,
-		getLines: () => lines,
-		getCursor: () => cursor,
 		setText: (value: string) => {
 			text = value;
-			lines = value.split("\n");
 		},
 	};
 	const previous = (() => base) as FooterEditorFactory;
@@ -146,30 +136,20 @@ test("Down enters footer from the draft's last line and Up returns", () => {
 	keys = ["pi-subagents"];
 
 	text = "first\nsecond";
-	lines = ["first", "second"];
-	lastVisualLine = false;
-	cursor.line = 0;
 	component.handleInput("x");
 	assert.equal(state.selectedKey, undefined);
 	assert.deepEqual(delegated, ["enter", "ctrl+c", "x"]);
 	component.handleInput("down");
-	assert.equal(state.selectedKey, undefined);
+	assert.equal(state.selectedKey, undefined, "non-empty drafts keep Down");
 	assert.deepEqual(delegated, ["enter", "ctrl+c", "x", "down"]);
 
-	cursor.line = 1;
-	component.handleInput("down");
-	assert.equal(
-		state.selectedKey,
-		undefined,
-		"wrapped visual lines stay in the draft",
-	);
-	lastVisualLine = true;
+	text = "";
 	component.handleInput("down");
 	assert.equal(state.selectedKey, "pi-subagents");
 	component.handleInput("x");
 	assert.equal(state.selectedKey, undefined);
-	assert.deepEqual(delegated, ["enter", "ctrl+c", "x", "down", "down", "x"]);
-	assert.ok(renders >= 12);
+	assert.deepEqual(delegated, ["enter", "ctrl+c", "x", "down", "x"]);
+	assert.ok(renders >= 10);
 });
 
 test("autocomplete and extension shortcuts keep first ownership of navigation keys", () => {
@@ -231,7 +211,6 @@ test("losing editor focus clears footer selection", () => {
 		invalidate: () => {},
 		handleInput: () => {},
 		getText: () => "",
-		isOnLastVisualLine: () => true,
 		setText: () => {},
 	};
 	const state = new FooterNavigationState();
@@ -272,8 +251,7 @@ test("special app actions remapped to Down retain editor ownership", () => {
 			render: () => ["editor"],
 			invalidate: () => {},
 			handleInput: (data: string) => delegated.push(data),
-			getText: () => "draft",
-			isOnLastVisualLine: () => true,
+			getText: () => "",
 			setText: () => {},
 		};
 		const defaults = keybindings();
@@ -303,16 +281,17 @@ test("special app actions remapped to Down retain editor ownership", () => {
 	}
 });
 
-test("history browsing retains Down before footer entry", () => {
+test("non-empty draft text retains Down before footer entry", () => {
 	const delegated: string[] = [];
+	let text = "history item";
 	const base = {
-		historyIndex: 0,
 		render: () => ["editor"],
 		invalidate: () => {},
 		handleInput: (data: string) => delegated.push(data),
-		getText: () => "history item",
-		isOnLastVisualLine: () => true,
-		setText: () => {},
+		getText: () => text,
+		setText: (value: string) => {
+			text = value;
+		},
 	};
 	const state = new FooterNavigationState();
 	const component = createFooterNavigationEditorFactory(
@@ -328,7 +307,7 @@ test("history browsing retains Down before footer entry", () => {
 	component.handleInput("down");
 	assert.deepEqual(delegated, ["down"]);
 	assert.equal(state.selectedKey, undefined);
-	base.historyIndex = -1;
+	text = "";
 	component.handleInput("down");
 	assert.equal(state.selectedKey, "pi-subagents");
 });
@@ -340,8 +319,7 @@ test("app actions remapped to Down retain ownership at the footer boundary", () 
 		render: () => ["editor"],
 		invalidate: () => {},
 		handleInput: (data: string) => delegated.push(data),
-		getText: () => "draft",
-		isOnLastVisualLine: () => true,
+		getText: () => "",
 		setText: () => {},
 	};
 	const defaults = keybindings();
@@ -373,8 +351,6 @@ test("a composed custom editor keeps ownership of boundary Down", () => {
 		invalidate: () => {},
 		handleInput: (data: string) => delegated.push(data),
 		getText: () => "draft",
-		getLines: () => ["draft"],
-		getCursor: () => ({ line: 0, col: 5 }),
 		setText: () => {},
 	};
 	const state = new FooterNavigationState();

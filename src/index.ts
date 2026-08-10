@@ -246,6 +246,8 @@ export default function uiCustomization(pi: ExtensionAPI): void {
 
 	pi.on("model_select", (_event, ctx) => refreshModel(ctx));
 	pi.on("thinking_level_select", (_event, ctx) => refreshModel(ctx));
+	pi.on("session_tree", (_event, ctx) => refreshModel(ctx));
+	pi.on("session_compact", (_event, ctx) => refreshModel(ctx));
 	pi.on("agent_start", (_event, ctx) => {
 		runContentTokens = 0;
 		runContentStreamMs = 0;

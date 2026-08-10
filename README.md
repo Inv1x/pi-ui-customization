@@ -38,7 +38,7 @@ No configuration file is required. The package uses the active Pi theme for foot
 
 Because Pi supports one custom header and one custom footer owner, avoid loading another extension that calls `setHeader` or `setFooter`. Extensions using `setStatus` remain compatible and render below this package's footer information.
 
-Press `Down` from the draft's last visual line to enter footer-status selection. Continue with `Up`/`Down`, press `Enter` to open the selected inspector, or `Esc` to cancel; `Up` from the first status returns to the draft. Autocomplete, history, remapped app keys, overlays, and an existing custom editor retain first ownership of input.
+Press `Down` while the draft is empty to enter footer-status selection. Continue with `Up`/`Down`, press `Enter` to open the selected inspector, or `Esc` to cancel; `Up` from the first status returns to the draft. Non-empty drafts (including recalled history), autocomplete, remapped app keys, overlays, and an existing custom editor retain first ownership of input. This conservative empty-draft rule uses only Pi's public editor API, so footer selection is not entered directly from the last line of a non-empty draft.
 
 This package intentionally does **not** hide Pi's startup `[Themes]` resource section. Pi 0.84.1 has no public API for suppressing that section, and mutating private TUI children or matching rendered text is brittle across renderers and reloads.
 

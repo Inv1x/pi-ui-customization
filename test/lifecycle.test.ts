@@ -4,6 +4,7 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 	ReadonlyFooterDataProvider,
+	SessionEntry,
 } from "@earendil-works/pi-coding-agent";
 import {
 	type Component,
@@ -32,6 +33,12 @@ function harness() {
 	let footer: (Component & { dispose?(): void }) | undefined;
 	let editorFactory: FooterEditorFactory | undefined;
 	let branch = "main";
+	let contextUsage = {
+		tokens: 10,
+		contextWindow: 128_000,
+		percent: 1,
+	};
+	let sessionBranch: SessionEntry[] = [];
 	let branchCallback: (() => void) | undefined;
 	let branchUnsubscribes = 0;
 	let renders = 0;
@@ -88,13 +95,9 @@ function harness() {
 			contextWindow: 128_000,
 		},
 		thinkingLevel: "high",
-		getContextUsage: () => ({
-			tokens: 10,
-			contextWindow: 128_000,
-			percent: 1,
-		}),
+		getContextUsage: () => contextUsage,
 		sessionManager: {
-			getBranch: () => [],
+			getBranch: () => sessionBranch,
 			getSessionId: () => "session-id",
 		},
 	} as unknown as ExtensionContext;
@@ -144,6 +147,15 @@ function harness() {
 			branch = next;
 			branchCallback?.();
 		},
+		mutateBranch(next: string) {
+			branch = next;
+		},
+		setContextUsage(percent: number, contextWindow: number) {
+			contextUsage = { tokens: 10, contextWindow, percent };
+		},
+		setSessionBranch(entries: SessionEntry[]) {
+			sessionBranch = entries;
+		},
 		get renders() {
 			return renders;
 		},
@@ -192,6 +204,41 @@ test("footer reacts to branch changes and both TUI renderer width regimes", asyn
 	assert.match(
 		(app.footer?.render(160) ?? []).join("\n"),
 		/feature\/fullscreen/,
+	);
+	await app.emit("session_shutdown", { reason: "quit" });
+});
+
+test("session tree and compaction refresh mutable branch and model state", async () => {
+	const app = harness();
+	await app.emit("session_start", { reason: "startup" });
+	const assistantUsage = {
+		type: "message",
+		message: { role: "assistant", usage: { cost: { total: 1.25 } } },
+	} as unknown as SessionEntry;
+	app.mutateBranch("feature/tree");
+	app.setContextUsage(42, 64_000);
+	app.setSessionBranch([assistantUsage]);
+	const treeRenders = app.renders;
+	await app.emit("session_tree", { newLeafId: "leaf" });
+	assert.ok(app.renders > treeRenders);
+	assert.match(
+		(app.footer?.render(160) ?? []).join("\n"),
+		/42%\/64k · \$1\.25.*feature\/tree/,
+	);
+
+	const compactionUsage = {
+		type: "compaction",
+		usage: { cost: { total: 0.5 } },
+	} as unknown as SessionEntry;
+	app.mutateBranch("feature/compacted");
+	app.setContextUsage(7, 32_000);
+	app.setSessionBranch([assistantUsage, compactionUsage]);
+	const compactRenders = app.renders;
+	await app.emit("session_compact", { compactionEntry: compactionUsage });
+	assert.ok(app.renders > compactRenders);
+	assert.match(
+		(app.footer?.render(160) ?? []).join("\n"),
+		/7%\/32k · \$1\.75.*feature\/compacted/,
 	);
 	await app.emit("session_shutdown", { reason: "quit" });
 });
