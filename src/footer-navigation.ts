@@ -68,6 +68,7 @@ type ComposableEditor = EditorComponent & {
 
 class FooterNavigationEditor implements EditorComponent {
 	private editorFocused = false;
+	private cursorAtFooterBoundary = false;
 
 	constructor(
 		private readonly base: ComposableEditor,
@@ -152,6 +153,7 @@ class FooterNavigationEditor implements EditorComponent {
 			this.state.clear();
 		if ("focused" in this.base) this.base.focused = this.editorFocused;
 		const lines = this.base.render(width);
+		this.cursorAtFooterBoundary = this.isCursorAtFooterBoundary(lines);
 		return this.state.selectedKey
 			? lines.map((line) => this.hideDraftCursor(line))
 			: lines;
@@ -226,7 +228,7 @@ class FooterNavigationEditor implements EditorComponent {
 		if (
 			this.boundaryNavigationEnabled &&
 			isEditorDown &&
-			this.base.getText().length === 0
+			(this.base.getText().length === 0 || this.cursorAtFooterBoundary)
 		) {
 			const checkedShortcut = Boolean(this.base.onExtensionShortcut);
 			if (this.base.onExtensionShortcut?.(data)) return;
@@ -239,6 +241,14 @@ class FooterNavigationEditor implements EditorComponent {
 			return;
 		}
 		this.base.handleInput(data);
+	}
+
+	private isCursorAtFooterBoundary(lines: readonly string[]): boolean {
+		if (!this.boundaryNavigationEnabled || this.base.isShowingAutocomplete?.())
+			return false;
+		const cursorLine = lines.findIndex((line) => line.includes(CURSOR_MARKER));
+		if (cursorLine < 0 || cursorLine !== lines.length - 2) return false;
+		return !lines.at(-1)?.includes("↓");
 	}
 
 	private delegateInput(data: string, shortcutAlreadyChecked: boolean): void {

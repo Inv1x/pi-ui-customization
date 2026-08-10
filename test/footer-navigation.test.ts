@@ -281,11 +281,15 @@ test("special app actions remapped to Down retain editor ownership", () => {
 	}
 });
 
-test("non-empty draft text retains Down before footer entry", () => {
+test("Down enters footer from a non-empty draft at its visual boundary", () => {
 	const delegated: string[] = [];
-	let text = "history item";
+	let text = "draft text";
 	const base = {
-		render: () => ["editor"],
+		render: () => [
+			"────────",
+			`draft text${CURSOR_MARKER}\u001b[7m \u001b[0m`,
+			"────────",
+		],
 		invalidate: () => {},
 		handleInput: (data: string) => delegated.push(data),
 		getText: () => text,
@@ -304,12 +308,54 @@ test("non-empty draft text retains Down before footer entry", () => {
 		},
 	)({ requestRender: () => {} } as unknown as TUI, {} as never, keybindings());
 
+	component.render(80);
+	component.handleInput("down");
+	assert.equal(state.selectedKey, "pi-subagents");
+	assert.deepEqual(delegated, []);
+	assert.equal(component.getText(), "draft text");
+});
+
+test("non-empty drafts retain Down above the final visible line", () => {
+	const delegated: string[] = [];
+	let bottomBorder = "────────";
+	const base = {
+		render: () => [
+			"────────",
+			`first${CURSOR_MARKER}\u001b[7m \u001b[0m`,
+			"second",
+			bottomBorder,
+		],
+		invalidate: () => {},
+		handleInput: (data: string) => delegated.push(data),
+		getText: () => "first\nsecond",
+		setText: () => {},
+	};
+	const state = new FooterNavigationState();
+	const component = createFooterNavigationEditorFactory(
+		(() => base) as FooterEditorFactory,
+		state,
+		{
+			getStatusKeys: () => ["pi-subagents"],
+			activate: () => {},
+			boundaryNavigationEnabled: true,
+		},
+	)({ requestRender: () => {} } as unknown as TUI, {} as never, keybindings());
+
+	component.render(80);
 	component.handleInput("down");
 	assert.deepEqual(delegated, ["down"]);
 	assert.equal(state.selectedKey, undefined);
-	text = "";
+
+	bottomBorder = "──── ↓ 1 ────";
+	base.render = () => [
+		"────────",
+		`second${CURSOR_MARKER}\u001b[7m \u001b[0m`,
+		bottomBorder,
+	];
+	component.render(80);
 	component.handleInput("down");
-	assert.equal(state.selectedKey, "pi-subagents");
+	assert.deepEqual(delegated, ["down", "down"]);
+	assert.equal(state.selectedKey, undefined);
 });
 
 test("app actions remapped to Down retain ownership at the footer boundary", () => {

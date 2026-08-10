@@ -4,6 +4,10 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+### Fixed
+
+- Allowed `Down` from the final visible line of a non-empty draft to enter footer-status navigation without stealing multiline or wrapped-line movement.
+
 ### Changed
 
 - Modernized against Pi and Pi TUI 0.84.1 with Node.js 22.19 as the tested runtime floor.
