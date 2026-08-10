@@ -89,6 +89,10 @@ npm pack --dry-run
 
 `prepack` runs the complete validation gate. CI tests the Node floor and a current Node release, then verifies the npm tarball.
 
+## Versioning
+
+Run `npm run changeset` for each user-facing change and commit the generated `.changeset/*.md` file. To prepare a release, run `npm run release:status` and then `npm run release:version`; Changesets consumes the pending files and updates `package.json`, `package-lock.json`, and `CHANGELOG.md`. These commands do not publish to npm or create a GitHub Release.
+
 ## Credits
 
 The overall layout and gradient treatment follow the `ui-customization`, `model-info`, and `git-info` extensions in [davis7dotsh/my-pi-setup](https://github.com/davis7dotsh/my-pi-setup).
