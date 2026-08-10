@@ -58,16 +58,24 @@ export const TITLE_LINES = [
 const OSC_PATTERN =
 	// biome-ignore lint/suspicious/noControlCharactersInRegex: intentionally strips OSC escape sequences
 	/(?:\u001b\]|\u009d)(?:[^\u0007\u001b\u009c]|\u001b(?!\\))*(?:\u0007|\u001b\\|\u009c)/g;
+// biome-ignore lint/suspicious/noControlCharactersInRegex: discard an unterminated OSC and its payload
+const UNTERMINATED_OSC_PATTERN = /(?:\u001b\]|\u009d)[\s\S]*$/g;
 // biome-ignore lint/suspicious/noControlCharactersInRegex: intentionally strips CSI escape sequences
 const CSI_PATTERN = /(?:\u001b\[|\u009b)[0-?]*[ -/]*[@-~]/g;
+// biome-ignore lint/suspicious/noControlCharactersInRegex: discard an unterminated CSI
+const UNTERMINATED_CSI_PATTERN = /(?:\u001b\[|\u009b)[0-?]*[ -/]*$/g;
 // biome-ignore lint/suspicious/noControlCharactersInRegex: intentionally strips remaining escape sequences
 const ESCAPE_PATTERN = /\u001b(?:[()][0-2A-Z]|[ -/]*[@-~])/g;
+const FORMAT_PATTERN = /\p{Cf}/gu;
 
 export function sanitizeTerminalLabel(text: string): string {
 	return text
 		.replace(OSC_PATTERN, "")
+		.replace(UNTERMINATED_OSC_PATTERN, "")
 		.replace(CSI_PATTERN, "")
+		.replace(UNTERMINATED_CSI_PATTERN, "")
 		.replace(ESCAPE_PATTERN, "")
+		.replace(FORMAT_PATTERN, "")
 		.replace(
 			// biome-ignore lint/suspicious/noControlCharactersInRegex: terminal labels must not contain control characters
 			/[\u0000-\u001f\u007f-\u009f]/g,
@@ -273,9 +281,12 @@ export function renderFooter(options: {
 			? "— tok/s"
 			: `${Math.round(model.tokensPerSecond)} tok/s`;
 	const usage = `${contextPercent}%/${contextWindow} · $${model.cost.toFixed(2)} · ${speed}`;
-	const modelLabel = model.provider
-		? `${model.provider}/${model.modelId} · ${model.thinking}`
-		: model.modelId;
+	const provider = sanitizeTerminalLabel(model.provider);
+	const modelId = sanitizeTerminalLabel(model.modelId);
+	const thinking = sanitizeTerminalLabel(model.thinking);
+	const modelLabel = provider
+		? `${provider}/${modelId} · ${thinking}`
+		: modelId;
 	const fileLabel = git.changedFiles === 1 ? "file" : "files";
 	const gitLabel = git.branch
 		? `${git.branch} · ${git.changedFiles} ${fileLabel} changed`

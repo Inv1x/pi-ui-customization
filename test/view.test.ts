@@ -108,6 +108,26 @@ test("footer keeps extension statuses sorted below its two information lines", (
 	assert.deepEqual(lines.slice(2), ["first", "second", "last"]);
 });
 
+test("footer sanitizes untrusted model metadata", () => {
+	const lines = renderFooter({
+		width: 100,
+		directory: "~/work/app",
+		model: {
+			...EMPTY_MODEL_INFO,
+			provider: "open\u001b]52;c;clipboard\u0007ai",
+			modelId: "gpt\u001b[2J-test\u202e",
+			thinking: "high\u001b]0;unterminated",
+		},
+		git: { ...EMPTY_GIT_INFO },
+		statuses: new Map(),
+		theme,
+	});
+	assert.match(lines[0] ?? "", /openai\/gpt-test · high$/);
+	assert.equal((lines[0] ?? "").includes("\u001b"), false);
+	assert.equal((lines[0] ?? "").includes("\u202e"), false);
+	assert.equal((lines[0] ?? "").includes("clipboard"), false);
+});
+
 test("footer inverts only the selected status text", () => {
 	const lines = renderFooter({
 		width: 80,
