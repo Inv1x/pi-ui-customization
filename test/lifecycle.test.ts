@@ -126,8 +126,13 @@ function harness() {
 
 	return {
 		ctx,
-		emit: async (name: string, event: unknown = {}) => {
-			for (const handler of handlers.get(name) ?? []) await handler(event, ctx);
+		emit: async (
+			name: string,
+			event: unknown = {},
+			eventContext = { ...ctx },
+		) => {
+			for (const handler of handlers.get(name) ?? [])
+				await handler(event, eventContext);
 		},
 		get header() {
 			return header;
@@ -240,6 +245,53 @@ test("session tree and compaction refresh mutable branch and model state", async
 		(app.footer?.render(160) ?? []).join("\n"),
 		/7%\/32k · \$1\.75.*feature\/compacted/,
 	);
+	await app.emit("session_shutdown", { reason: "quit" });
+});
+
+test("prompt wait state follows the session, not ephemeral context identity", async () => {
+	const app = harness();
+	await app.emit("session_start");
+	await app.emit("ui_prompt_start");
+	await app.emit("ui_prompt_start");
+	assert.match(app.titles.at(-1) ?? "", /waiting for user/);
+	assert.match((app.footer?.render(160) ?? []).join("\n"), /waiting for user/);
+	await app.emit("ui_prompt_end");
+	assert.match(app.titles.at(-1) ?? "", /waiting for user/);
+	await app.emit("ui_prompt_end");
+	await app.emit("ui_prompt_end");
+	assert.doesNotMatch(app.titles.at(-1) ?? "", /waiting for user/);
+	await app.emit("ui_prompt_start");
+	await app.emit("session_shutdown", { reason: "new" });
+	await app.emit("session_start", { reason: "new" });
+	assert.equal(app.statusListenerCount(), 1);
+	assert.doesNotMatch(
+		(app.footer?.render(160) ?? []).join("\n"),
+		/waiting for user/,
+	);
+	await app.emit(
+		"ui_prompt_start",
+		{},
+		{
+			...app.ctx,
+			sessionManager: {
+				...app.ctx.sessionManager,
+				getSessionId: () => "other-session",
+			},
+		},
+	);
+	assert.doesNotMatch(app.titles.at(-1) ?? "", /waiting for user/);
+	await app.emit("session_shutdown", { reason: "quit" });
+});
+
+test("idle usage entries refresh cost without an assistant event", async (t) => {
+	t.mock.timers.enable({ apis: ["setInterval"] });
+	const app = harness();
+	await app.emit("session_start");
+	app.setSessionBranch([
+		{ type: "usage", kind: "cache_warm", usage: { cost: { total: 0.5 } } },
+	] as unknown as SessionEntry[]);
+	t.mock.timers.tick(3_000);
+	assert.match((app.footer?.render(160) ?? []).join("\n"), /\$0\.50/);
 	await app.emit("session_shutdown", { reason: "quit" });
 });
 

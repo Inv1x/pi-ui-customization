@@ -5,21 +5,21 @@ A standalone startup header and information-rich footer for [Pi](https://github.
 It installs:
 
 - a centered blue-gradient Pi logo and current-folder startup header;
-- a two-line footer with folder, provider/model, thinking level, context use, complete persisted session cost, generation speed, Git branch, and changed-file count;
+- a two-line footer with folder, provider/model, thinking level, context use, complete persisted session cost (including cache warming and other usage records), generation speed, Git branch, and changed-file count;
 - all other extensions' status lines below those two information rows;
 - `Up`/`Down` selection for the background-terminal and subagent status rows, with `Enter` opening `/ps` or `/subagents-fleet` through a typed cross-extension event contract.
 
-Model, context, cost, and Git data are collected directly by this package. The separate `model-info` and `git-info` extensions from the reference setup are not required. Pi's supported footer provider supplies the branch reactively; only changed-file count is polled, and Git failures quietly degrade outside a repository.
+Model, context, cost, and Git data are collected directly by this package. The separate `model-info` and `git-info` extensions from the reference setup are not required. Pi's supported footer provider supplies the branch reactively; changed-file count and persisted usage totals are refreshed every three seconds, and Git failures quietly degrade outside a repository.
 
-The cost includes persisted assistant usage, nested model usage reported by tools, compaction summaries, and branch summaries on the active branch.
+The cost includes persisted assistant usage, nested model usage reported by tools, standalone usage records such as cache warming, compaction summaries, and branch summaries on the active branch. Blocking extension prompts add an unobtrusive `waiting for user` marker to the footer and terminal title until the paired prompt ends.
 
 ## Requirements and compatibility
 
 - Node.js 22.19 or newer.
-- Tested floor: `@earendil-works/pi-coding-agent` and `@earendil-works/pi-tui` 0.84.1.
+- Requires `@earendil-works/pi-coding-agent` and `@earendil-works/pi-tui` 0.87.1 or newer.
 - Both regular/main-screen and fullscreen/alternate-screen TUI modes are supported. Components honor every render width and do not depend on a concrete renderer.
 
-Pi's core packages remain unbundled `peerDependencies` with `"*"` ranges, as required for Pi packages. Development and CI pin 0.84.1 to continuously test the documented floor.
+Pi's core packages remain unbundled peer dependencies with a `>=0.87.1` floor. Development and CI pin exactly 0.87.1 to continuously test the documented floor.
 
 ## Install
 
@@ -38,9 +38,9 @@ No configuration file is required. The package uses the active Pi theme for foot
 
 Because Pi supports one custom header and one custom footer owner, avoid loading another extension that calls `setHeader` or `setFooter`. Extensions using `setStatus` remain compatible and render below this package's footer information.
 
-Press `Down` from the final visible line of the draft, including a non-empty draft, to enter footer-status selection. Continue with `Up`/`Down`, press `Enter` to open the selected inspector, or `Esc` to cancel; `Up` from the first status returns to the draft. Earlier lines in multiline or wrapped drafts retain `Down` for editor navigation. Autocomplete, remapped app keys, overlays, and an existing custom editor retain first ownership of input.
+Press `Down` from the final visible line of the draft, including a non-empty draft, to enter footer-status selection. Continue with `Up`/`Down`, press `Enter` to open the selected inspector, or `Esc` to cancel; `Up` from the first status returns to the draft. Earlier lines in multiline or wrapped drafts retain `Down` for editor navigation. Autocomplete, remapped app keys, overlays, and an existing custom editor retain first ownership of input. The editor wrapper preserves composed editors' working-status opt-in or opt-out; when no outer editor exists it embeds Pi's working, retry, compaction, and branch-summary indicators in the editor border.
 
-This package intentionally does **not** hide Pi's startup `[Themes]` resource section. Pi 0.84.1 has no public API for suppressing that section, and mutating private TUI children or matching rendered text is brittle across renderers and reloads.
+This package intentionally does **not** hide Pi's startup `[Themes]` resource section. Pi 0.87.1 has no public API for suppressing that section, and mutating private TUI children or matching rendered text is brittle across renderers and reloads.
 
 On reload, new, resume, fork, and quit shutdown flows, the package clears timers and subscriptions, restores the previous editor factory when it still owns the editor, removes its header/footer, and resets the terminal title to `pi`. Pi does not expose the previous title, so exact third-party title restoration is not possible.
 

@@ -258,6 +258,7 @@ export function renderFooter(options: {
 	statuses: ReadonlyMap<string, string>;
 	selectedStatusKey?: string;
 	preserveSelectedStatusColorKeys?: ReadonlySet<string>;
+	waitingForUser?: boolean;
 	theme: DashboardTheme;
 }): string[] {
 	const {
@@ -268,6 +269,7 @@ export function renderFooter(options: {
 		statuses,
 		selectedStatusKey,
 		preserveSelectedStatusColorKeys,
+		waitingForUser = false,
 		theme,
 	} = options;
 	const contextPercent =
@@ -284,9 +286,12 @@ export function renderFooter(options: {
 	const provider = sanitizeTerminalLabel(model.provider);
 	const modelId = sanitizeTerminalLabel(model.modelId);
 	const thinking = sanitizeTerminalLabel(model.thinking);
-	const modelLabel = provider
+	const baseModelLabel = provider
 		? `${provider}/${modelId} · ${thinking}`
 		: modelId;
+	const modelLabel = waitingForUser
+		? `${baseModelLabel} · waiting for user`
+		: baseModelLabel;
 	const fileLabel = git.changedFiles === 1 ? "file" : "files";
 	const gitLabel = git.branch
 		? `${git.branch} · ${git.changedFiles} ${fileLabel} changed`

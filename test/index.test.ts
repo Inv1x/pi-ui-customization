@@ -52,7 +52,21 @@ test("session cost includes all persisted model usage on the branch", () => {
 		},
 		{ type: "compaction", usage: usage(0.2) },
 		{ type: "branch_summary", usage: usage(0.3) },
+		{ type: "usage", kind: "cache_warm", usage: usage(0.25) },
+		{ type: "usage", kind: "future_kind", usage: usage(0.5) },
+		{
+			type: "custom_message",
+			customType: "usage-notice",
+			details: { usage: usage(0.25) },
+		},
+		{ type: "context_edit", targetId: "assistant", replacement: null },
 		{ type: "message", message: { role: "user" } },
 	] as unknown as SessionEntry[];
-	assert.equal(sessionCost(entries), 2.25);
+	assert.equal(sessionCost(entries), 3);
+	assert.equal(
+		sessionCost([
+			{ type: "usage", usage: usage(Number.NaN) },
+		] as unknown as SessionEntry[]),
+		0,
+	);
 });

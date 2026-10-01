@@ -72,7 +72,11 @@ export function sessionCost(entries: readonly SessionEntry[]): number {
 				total += usageCost(entry.message.usage);
 			else if (entry.message.role === "toolResult")
 				total += usageCost(entry.message.usage);
-		} else if (entry.type === "compaction" || entry.type === "branch_summary") {
+		} else if (
+			entry.type === "usage" ||
+			entry.type === "compaction" ||
+			entry.type === "branch_summary"
+		) {
 			total += usageCost(entry.usage);
 		}
 	}
@@ -96,11 +100,16 @@ export default function uiCustomization(pi: ExtensionAPI): void {
 	let generation = 0;
 	let refreshingGit = false;
 	let pendingGitRefresh = false;
+	let waitingPromptDepth = 0;
+	let currentDirectory = "";
 	const preserveSelectedStatusColorKeys = new Set<string>();
-	const uninstallStatusOptions = pi.events.on(STATUS_OPTIONS_EVENT, (data) => {
-		if (applyStatusOptions(preserveSelectedStatusColorKeys, data))
-			requestRender?.();
-	});
+	const subscribeStatusOptions = () =>
+		pi.events.on(STATUS_OPTIONS_EVENT, (data) => {
+			if (applyStatusOptions(preserveSelectedStatusColorKeys, data))
+				requestRender?.();
+		});
+	let uninstallStatusOptions: (() => void) | undefined =
+		subscribeStatusOptions();
 
 	let contentStreamStart: number | null = null;
 	let lastContentDeltaAt: number | null = null;
@@ -167,9 +176,17 @@ export default function uiCustomization(pi: ExtensionAPI): void {
 		}
 	}
 
+	function updateTitle(ctx = currentContext): void {
+		if (ctx?.mode !== "tui") return;
+		ctx.ui.setTitle(
+			`pi · ${currentDirectory}${waitingPromptDepth > 0 ? " · waiting for user" : ""}`,
+		);
+	}
+
 	function install(ctx: ExtensionContext): void {
 		if (ctx.mode !== "tui") return;
 		const directory = formatDirectory(ctx.cwd);
+		currentDirectory = directory;
 		ctx.ui.setHeader((tui) => {
 			requestRender = () => tui.requestRender();
 			return {
@@ -196,6 +213,7 @@ export default function uiCustomization(pi: ExtensionAPI): void {
 						statuses,
 						selectedStatusKey: footerNavigation.selectedKey,
 						preserveSelectedStatusColorKeys,
+						waitingForUser: waitingPromptDepth > 0,
 						theme,
 					});
 				},
@@ -223,7 +241,7 @@ export default function uiCustomization(pi: ExtensionAPI): void {
 			},
 		);
 		ctx.ui.setEditorComponent(installedEditorFactory);
-		ctx.ui.setTitle(`pi · ${directory}`);
+		updateTitle(ctx);
 	}
 
 	pi.on("session_start", (_event, ctx) => {
@@ -232,6 +250,9 @@ export default function uiCustomization(pi: ExtensionAPI): void {
 		currentContext = ctx;
 		modelInfo = { ...EMPTY_MODEL_INFO };
 		gitInfo = { ...EMPTY_GIT_INFO };
+		waitingPromptDepth = 0;
+		currentDirectory = "";
+		uninstallStatusOptions ??= subscribeStatusOptions();
 		runContentTokens = 0;
 		runContentStreamMs = 0;
 		resetMessageTracking();
@@ -239,9 +260,35 @@ export default function uiCustomization(pi: ExtensionAPI): void {
 		refreshModel(ctx);
 		void refreshChangedFiles(ctx);
 		if (ctx.mode === "tui") {
-			gitTimer = setInterval(() => void refreshChangedFiles(), GIT_REFRESH_MS);
+			gitTimer = setInterval(() => {
+				refreshModel(ctx);
+				void refreshChangedFiles();
+			}, GIT_REFRESH_MS);
 			gitTimer.unref?.();
 		}
+	});
+
+	pi.on("ui_prompt_start", (_event, ctx) => {
+		if (
+			!currentContext ||
+			currentContext.sessionManager.getSessionId() !==
+				ctx.sessionManager.getSessionId()
+		)
+			return;
+		waitingPromptDepth += 1;
+		updateTitle(ctx);
+		requestRender?.();
+	});
+	pi.on("ui_prompt_end", (_event, ctx) => {
+		if (
+			!currentContext ||
+			currentContext.sessionManager.getSessionId() !==
+				ctx.sessionManager.getSessionId()
+		)
+			return;
+		waitingPromptDepth = Math.max(0, waitingPromptDepth - 1);
+		updateTitle(ctx);
+		requestRender?.();
 	});
 
 	pi.on("model_select", (_event, ctx) => refreshModel(ctx));
@@ -347,6 +394,8 @@ export default function uiCustomization(pi: ExtensionAPI): void {
 		currentContext = undefined;
 		footerDataProvider = undefined;
 		requestRender = undefined;
+		waitingPromptDepth = 0;
+		currentDirectory = "";
 		footerNavigation.clear();
 		if (ctx.mode === "tui") {
 			ctx.ui.setHeader(undefined);
@@ -357,6 +406,8 @@ export default function uiCustomization(pi: ExtensionAPI): void {
 		}
 		previousEditorFactory = undefined;
 		installedEditorFactory = undefined;
-		uninstallStatusOptions();
+		uninstallStatusOptions?.();
+		uninstallStatusOptions = undefined;
+		preserveSelectedStatusColorKeys.clear();
 	});
 }

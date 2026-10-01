@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.0
+
+### Minor Changes
+
+- Require Pi 0.87.1, preserve embedded working/recovery indicators through editor composition, include standalone model usage in cost totals, and show a waiting-for-user marker during extension prompts. Refresh idle cache-warming costs and test session replacement, prompt lifecycles, and indicator opt-outs.
+
+### Patch Changes
+
+- df0d636: Allow footer-status navigation from the final visible line of non-empty drafts.
+- b71de2a: Adopt Changesets for version and changelog management.
+
 All notable changes to this project are documented here.
 
 ## Unreleased

@@ -1,6 +1,6 @@
 {
 	"name": "@inv1x/pi-ui-customization",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"description": "Standalone startup header and information-rich footer for Pi",
 	"type": "module",
 	"license": "MIT",
@@ -41,8 +41,8 @@
 		]
 	},
 	"peerDependencies": {
-		"@earendil-works/pi-coding-agent": "*",
-		"@earendil-works/pi-tui": "*"
+		"@earendil-works/pi-coding-agent": ">=0.87.1",
+		"@earendil-works/pi-tui": ">=0.87.1"
 	},
 	"scripts": {
 		"check": "biome check .",
@@ -58,8 +58,8 @@
 	"devDependencies": {
 		"@biomejs/biome": "2.5.5",
 		"@changesets/cli": "2.31.1",
-		"@earendil-works/pi-coding-agent": "0.84.1",
-		"@earendil-works/pi-tui": "0.84.1",
+		"@earendil-works/pi-coding-agent": "0.87.1",
+		"@earendil-works/pi-tui": "0.87.1",
 		"@types/node": "^26.1.1",
 		"jiti": "^2.7.0",
 		"typescript": "^7.0.2"

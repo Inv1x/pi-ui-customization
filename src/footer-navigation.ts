@@ -55,9 +55,15 @@ export class FooterNavigationState {
 	}
 }
 
+type WorkingStatusIndicator = Parameters<
+	CustomEditor["setWorkingStatusIndicator"]
+>[0];
+
 type ComposableEditor = EditorComponent & {
 	focused?: boolean;
 	dispose?: () => void;
+	readonly embedWorkingStatus?: boolean;
+	setWorkingStatusIndicator?: (indicator: WorkingStatusIndicator) => void;
 	actionHandlers?: Map<string, () => void>;
 	onEscape?: () => void;
 	onCtrlD?: () => void;
@@ -69,6 +75,7 @@ type ComposableEditor = EditorComponent & {
 class FooterNavigationEditor implements EditorComponent {
 	private editorFocused = false;
 	private cursorAtFooterBoundary = false;
+	readonly embedWorkingStatus: boolean;
 
 	constructor(
 		private readonly base: ComposableEditor,
@@ -78,7 +85,15 @@ class FooterNavigationEditor implements EditorComponent {
 		private readonly activate: (key: string) => void,
 		private readonly requestRender: () => void,
 		private readonly boundaryNavigationEnabled: boolean,
-	) {}
+	) {
+		this.embedWorkingStatus =
+			base.embedWorkingStatus === true &&
+			typeof base.setWorkingStatusIndicator === "function";
+	}
+
+	setWorkingStatusIndicator(indicator: WorkingStatusIndicator): void {
+		this.base.setWorkingStatusIndicator?.(indicator);
+	}
 
 	get focused(): boolean {
 		return this.editorFocused;
@@ -363,7 +378,9 @@ export function createFooterNavigationEditorFactory(
 	return (tui, theme, keybindings) => {
 		const base =
 			previous?.(tui, theme, keybindings) ??
-			new CustomEditor(tui, theme, keybindings);
+			new CustomEditor(tui, theme, keybindings, {
+				embedWorkingStatus: true,
+			});
 		return new FooterNavigationEditor(
 			base,
 			keybindings,
