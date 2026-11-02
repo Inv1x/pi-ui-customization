@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0
+
+### Minor Changes
+
+- 6e37057: Raise the minimum supported Pi version to 1.4.0 and pin the development SDK and lockfile to that release. Older Pi hosts are no longer supported. Update terminal test fixtures for program-status support, verify the dependency tree in CI, and remove obsolete documentation about the startup Themes section that Pi no longer displays.
+
+### Patch Changes
+
+- 8a3f37a: Show the Git branch beside the footer folder using Oh My Zsh candy styling: green brackets and branch with a red dirty marker. Keep the changed-file count on the second line without duplicating the branch.
+
 ## 0.2.0
 
 ### Minor Changes
