@@ -292,12 +292,16 @@ export function renderFooter(options: {
 	const modelLabel = waitingForUser
 		? `${baseModelLabel} · waiting for user`
 		: baseModelLabel;
-	const fileLabel = git.changedFiles === 1 ? "file" : "files";
-	const gitLabel = git.branch
-		? `${git.branch} · ${git.changedFiles} ${fileLabel} changed`
+	const branch = sanitizeTerminalLabel(git.branch ?? "");
+	// Match Oh My Zsh's candy theme using the terminal's standard green/red.
+	const branchIndicator = branch
+		? ` \u001b[32m[${branch}${git.changedFiles > 0 ? " \u001b[31m*\u001b[32m" : ""}]${RESET}`
 		: "";
+	const directoryLabel = `${theme.fg("text", directory)}${branchIndicator}`;
+	const fileLabel = git.changedFiles === 1 ? "file" : "files";
+	const gitLabel = branch ? `${git.changedFiles} ${fileLabel} changed` : "";
 	const lines = [
-		columns(theme.fg("text", directory), theme.fg("muted", modelLabel), width),
+		columns(directoryLabel, theme.fg("muted", modelLabel), width),
 		columns(theme.fg("muted", usage), theme.fg("muted", gitLabel), width),
 	];
 

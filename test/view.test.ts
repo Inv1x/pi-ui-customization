@@ -100,12 +100,82 @@ test("footer keeps extension statuses sorted below its two information lines", (
 		]),
 		theme,
 	});
-	assert.match(lines[0] ?? "", /^~\/work\/app.*openai\/gpt-test · high$/);
+	assert.match(
+		sanitizeTerminalLabel(lines[0] ?? ""),
+		/^~\/work\/app \[main \*\].*openai\/gpt-test · high$/,
+	);
 	assert.match(
 		lines[1] ?? "",
-		/^13%\/128k · \$1\.23 · 42 tok\/s.*main · 1 file changed$/,
+		/^13%\/128k · \$1\.23 · 42 tok\/s.*1 file changed$/,
 	);
 	assert.deepEqual(lines.slice(2), ["first", "second", "last"]);
+});
+
+test("footer matches candy's clean and dirty branch colors beside the folder", () => {
+	for (const [changedFiles, indicator, count] of [
+		[0, "\u001b[32m[main]\u001b[0m", "0 files changed"],
+		[1, "\u001b[32m[main \u001b[31m*\u001b[32m]\u001b[0m", "1 file changed"],
+		[2, "\u001b[32m[main \u001b[31m*\u001b[32m]\u001b[0m", "2 files changed"],
+	] as const) {
+		const lines = renderFooter({
+			width: 100,
+			directory: "~/work/app",
+			model: { ...EMPTY_MODEL_INFO },
+			git: { branch: "main", changedFiles },
+			statuses: new Map(),
+			theme,
+		});
+		assert.ok((lines[0] ?? "").startsWith(`~/work/app ${indicator} `));
+		assert.ok((lines[1] ?? "").endsWith(count));
+		assert.equal((lines[1] ?? "").includes("main"), false);
+	}
+});
+
+test("footer omits the Git indicator when no branch exists", () => {
+	for (const branch of [undefined, "", "\u001b[31m\u001b[0m"]) {
+		const lines = renderFooter({
+			width: 100,
+			directory: "~/work/app",
+			model: { ...EMPTY_MODEL_INFO },
+			git: { branch, changedFiles: 2 },
+			statuses: new Map(),
+			theme,
+		});
+		assert.equal(lines[0], `~/work/app${" ".repeat(82)}no-model`);
+		assert.equal(lines[1], "?%/? · $0.00 · — tok/s");
+	}
+});
+
+test("footer sanitizes branch labels before adding candy colors", () => {
+	const lines = renderFooter({
+		width: 100,
+		directory: "~/work/app",
+		model: { ...EMPTY_MODEL_INFO },
+		git: {
+			branch: "feat/\u001b]0;forged-title\u0007safe\u001b[2J\u202e\n",
+			changedFiles: 0,
+		},
+		statuses: new Map(),
+		theme,
+	});
+	assert.ok(
+		(lines[0] ?? "").startsWith("~/work/app \u001b[32m[feat/safe]\u001b[0m "),
+	);
+	assert.equal((lines[1] ?? "").includes("feat/"), false);
+});
+
+test("footer fits long Unicode branches within narrow terminal widths", () => {
+	for (const width of [1, 12, 80, 160]) {
+		const lines = renderFooter({
+			width,
+			directory: "~/work/app",
+			model: { ...EMPTY_MODEL_INFO },
+			git: { branch: `feature/${"界🚀".repeat(60)}`, changedFiles: 2 },
+			statuses: new Map(),
+			theme,
+		});
+		assert.ok(lines.every((line) => visibleWidth(line) <= width));
+	}
 });
 
 test("footer sanitizes untrusted model metadata", () => {

@@ -206,10 +206,9 @@ test("footer reacts to branch changes and both TUI renderer width regimes", asyn
 	const renders = app.renders;
 	app.changeBranch("feature/fullscreen");
 	assert.equal(app.renders, renders + 1);
-	assert.match(
-		(app.footer?.render(160) ?? []).join("\n"),
-		/feature\/fullscreen/,
-	);
+	assert.match(app.footer?.render(160)[0] ?? "", /\[feature\/fullscreen/);
+	app.changeBranch("");
+	assert.doesNotMatch(app.footer?.render(160)[0] ?? "", /feature\/fullscreen/);
 	await app.emit("session_shutdown", { reason: "quit" });
 });
 
@@ -226,10 +225,8 @@ test("session tree and compaction refresh mutable branch and model state", async
 	const treeRenders = app.renders;
 	await app.emit("session_tree", { newLeafId: "leaf" });
 	assert.ok(app.renders > treeRenders);
-	assert.match(
-		(app.footer?.render(160) ?? []).join("\n"),
-		/42%\/64k · \$1\.25.*feature\/tree/,
-	);
+	assert.match(app.footer?.render(160)[0] ?? "", /\[feature\/tree/);
+	assert.match(app.footer?.render(160)[1] ?? "", /42%\/64k · \$1\.25/);
 
 	const compactionUsage = {
 		type: "compaction",
@@ -241,10 +238,8 @@ test("session tree and compaction refresh mutable branch and model state", async
 	const compactRenders = app.renders;
 	await app.emit("session_compact", { compactionEntry: compactionUsage });
 	assert.ok(app.renders > compactRenders);
-	assert.match(
-		(app.footer?.render(160) ?? []).join("\n"),
-		/7%\/32k · \$1\.75.*feature\/compacted/,
-	);
+	assert.match(app.footer?.render(160)[0] ?? "", /\[feature\/compacted/);
+	assert.match(app.footer?.render(160)[1] ?? "", /7%\/32k · \$1\.75/);
 	await app.emit("session_shutdown", { reason: "quit" });
 });
 

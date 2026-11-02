@@ -34,7 +34,7 @@ Use `pi -e .` only for a temporary development smoke test. You can also add the 
 
 ## Configuration and behavior
 
-No configuration file is required. The package uses the active Pi theme for footer text and a fixed blue RGB gradient for the logo. Changed-file state refreshes at startup, after input/tool activity and turns, and every three seconds while a TUI session is open.
+No configuration file is required. The package uses the active Pi theme for footer text and a fixed blue RGB gradient for the logo. Beside the footer folder, the Git branch matches Oh My Zsh's candy theme: green `[branch]` when clean, or green brackets and branch with a red `*` as `[branch *]` when files have changed (including untracked files). The indicator is omitted when no branch is available. Its green/red colors use the terminal's ANSI palette, while the changed-file count stays on the second line without repeating the branch. As before, the Git count is hidden when no branch is available. The startup header and terminal title are unchanged. Changed-file state refreshes at startup, after input/tool activity and turns, and every three seconds while a TUI session is open.
 
 Because Pi supports one custom header and one custom footer owner, avoid loading another extension that calls `setHeader` or `setFooter`. Extensions using `setStatus` remain compatible and render below this package's footer information.
 
