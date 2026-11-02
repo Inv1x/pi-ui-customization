@@ -242,6 +242,7 @@ test("header and footer render in regular and fullscreen TUI implementations", (
 		clearScreen() {},
 		setTitle() {},
 		setProgress() {},
+		setProgramStatus() {},
 	} as Terminal;
 	for (const tui of [new TuiMainScreen(terminal), new TuiAltScreen(terminal)]) {
 		tui.addChild({

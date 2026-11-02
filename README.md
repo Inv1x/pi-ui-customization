@@ -16,10 +16,10 @@ The cost includes persisted assistant usage, nested model usage reported by tool
 ## Requirements and compatibility
 
 - Node.js 22.19 or newer.
-- Requires `@earendil-works/pi-coding-agent` and `@earendil-works/pi-tui` 0.87.1 or newer.
+- Requires `@earendil-works/pi-coding-agent` and `@earendil-works/pi-tui` 1.4.0 or newer.
 - Both regular/main-screen and fullscreen/alternate-screen TUI modes are supported. Components honor every render width and do not depend on a concrete renderer.
 
-Pi's core packages remain unbundled peer dependencies with a `>=0.87.1` floor. Development and CI pin exactly 0.87.1 to continuously test the documented floor.
+Pi's core packages remain unbundled peer dependencies with a `>=1.4.0` floor. Development dependencies and the lockfile pin exactly 1.4.0 to continuously test the documented floor. This includes fixes for overlapping dialogs and overlays, restored extension tools, and terminal cleanup.
 
 ## Install
 
@@ -40,7 +40,7 @@ Because Pi supports one custom header and one custom footer owner, avoid loading
 
 Press `Down` from the final visible line of the draft, including a non-empty draft, to enter footer-status selection. Continue with `Up`/`Down`, press `Enter` to open the selected inspector, or `Esc` to cancel; `Up` from the first status returns to the draft. Earlier lines in multiline or wrapped drafts retain `Down` for editor navigation. Autocomplete, remapped app keys, overlays, and an existing custom editor retain first ownership of input. The editor wrapper preserves composed editors' working-status opt-in or opt-out; when no outer editor exists it embeds Pi's working, retry, compaction, and branch-summary indicators in the editor border.
 
-This package intentionally does **not** hide Pi's startup `[Themes]` resource section. Pi 0.87.1 has no public API for suppressing that section, and mutating private TUI children or matching rendered text is brittle across renderers and reloads.
+Pi itself no longer shows a startup `[Themes]` resource section (since 0.99.0). This package does not mutate private TUI children or filter rendered startup text.
 
 On reload, new, resume, fork, and quit shutdown flows, the package clears timers and subscriptions, restores the previous editor factory when it still owns the editor, removes its header/footer, and resets the terminal title to `pi`. Pi does not expose the previous title, so exact third-party title restoration is not possible.
 
